@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Scotia documentation: architecture, CLI reference, event algebra, and testing strategy.">
+    <title>Docs — Scotia</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="../index.html" class="logo">
+                <span class="logo-mark">🏴󠁧󠁢󠁳󠁣󠁴󠁿</span>
+                <span class="logo-text">Scotia</span>
+            </a>
+            <nav class="nav" aria-label="Primary">
+                <a href="../index.html#why">Why</a>
+                <a href="../index.html#architecture">Architecture</a>
+                <a href="../index.html#install">Install</a>
+                <a href="#">Docs</a>
+            </nav>
+            <div class="header-actions">
+                <button class="theme-toggle" aria-label="Toggle theme" title="Toggle theme">
+                    <span class="theme-icon light">☀</span>
+                    <span class="theme-icon dark">☾</span>
+                </button>
+                <a href="https://github.com/scotia/scotia" class="btn btn-secondary">GitHub</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero" style="padding: 70px 0 50px;">
+            <div class="container">
+                <div class="badge">Documentation</div>
+                <h1>Scotia docs</h1>
+                <p class="lead">Architecture, CLI reference, event algebra, and testing strategy.</p>
+            </div>
+        </section>
+
+        <section class="section section-alt">
+            <div class="container">
+                <div class="docs-grid" style="display: grid; grid-template-columns: 240px 1fr; gap: 48px;">
+                    <aside class="toc" style="position: sticky; top: 100px; height: fit-content;">
+                        <nav aria-label="Documentation">
+                            <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px;">
+                                <li><a href="#cli" style="color: var(--text-muted); text-decoration: none;">CLI reference</a></li>
+                                <li><a href="#events" style="color: var(--text-muted); text-decoration: none;">Event algebra</a></li>
+                                <li><a href="#interceptors" style="color: var(--text-muted); text-decoration: none;">Interceptors</a></li>
+                                <li><a href="#testing" style="color: var(--text-muted); text-decoration: none;">Testing strategy</a></li>
+                            </ul>
+                        </nav>
+                    </aside>
+
+                    <div class="docs-content">
+                        <article id="cli" class="doc-section" style="margin-bottom: 60px;">
+                            <h2>CLI reference</h2>
+                            <p>Scotia is controlled through a single binary. All commands accept <code>--log-root</code> and <code>--git-commit</code> global flags.</p>
+
+                            <h3><code>scotia run</code></h3>
+                            <p>Wrap an agent process and capture its telemetry.</p>
+                            <div class="code-block"><pre><code>scotia run --agent claude-code --task "refactor auth" -- claude</code></pre></div>
+
+                            <h3><code>scotia list</code></h3>
+                            <p>List stored run artifacts.</p>
+                            <div class="code-block"><pre><code>scotia list</code></pre></div>
+
+                            <h3><code>scotia validate</code></h3>
+                            <p>Check a stored run for structural issues.</p>
+                            <div class="code-block"><pre><code>scotia validate scotia-log/2026-07-03/run_*.json</code></pre></div>
+
+                            <h3><code>scotia diff</code></h3>
+                            <p>Compare two runs by actions, model routes, and errors.</p>
+                            <div class="code-block"><pre><code>scotia diff run_a.json run_b.json</code></pre></div>
+
+                            <h3><code>scotia regression</code></h3>
+                            <p>Generate deterministic assertions from a captured run.</p>
+                            <div class="code-block"><pre><code>scotia regression run_a.json</code></pre></div>
+
+                            <h3><code>scotia summary</code></h3>
+                            <p>Print the Markdown synthesis for a run.</p>
+                            <div class="code-block"><pre><code>scotia summary run_a.json</code></pre></div>
+                        </article>
+
+                        <article id="events" class="doc-section" style="margin-bottom: 60px;">
+                            <h2>Event algebra</h2>
+                            <p>The canonical schema contains nine event types. Together they reconstruct an agent execution without storing full transcripts.</p>
+                            <ul style="color: var(--text-muted); line-height: 2;">
+                                <li><code>run_started</code> — agent process began</li>
+                                <li><code>prompt_submitted</code> — user or system input</li>
+                                <li><code>action_invoked</code> — tool or shell call</li>
+                                <li><code>action_result</code> — tool or shell result</li>
+                                <li><code>model_routed</code> — planner/executor routing decision</li>
+                                <li><code>response_chunk</code> — agent output</li>
+                                <li><code>error_or_retry</code> — failure or retry signal</li>
+                                <li><code>state_delta</code> — file or environment change</li>
+                                <li><code>run_finished</code> — agent process ended</li>
+                            </ul>
+                            <p>Operations include <strong>validate</strong>, <strong>action_graph</strong>, <strong>diff_runs</strong>, and <strong>regression_suite</strong>.</p>
+                        </article>
+
+                        <article id="interceptors" class="doc-section" style="margin-bottom: 60px;">
+                            <h2>Interceptors</h2>
+                            <p>Each supported agent has a dedicated interceptor in <code>src/interceptors/</code>. Interceptors are stateful parsers that turn agent-specific output patterns into canonical events.</p>
+                            <p>They handle tool prefixes, JSON payloads, bracketed actions, routing hints, unified diff blocks, retry/error signals, and stderr classification.</p>
+                        </article>
+
+                        <article id="testing" class="doc-section">
+                            <h2>Testing strategy</h2>
+                            <p>Scotia ships with 149+ tests across unit, integration, property-based, concurrency, and end-to-end categories.</p>
+                            <div class="code-block"><pre><code>cargo test        # run everything
+cargo build --release</code></pre></div>
+                            <p>Stress suites live in <code>tests/stress_*.rs</code> and cover large inputs, concurrent writes, CLI round-trips, and git commit round-trips.</p>
+                        </article>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <p>© 2026 Scotia Contributors.</p>
+            <div class="footer-links">
+                <a href="https://github.com/scotia/scotia">GitHub</a>
+                <a href="../index.html">Home</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../script.js"></script>
+</body>
+</html>

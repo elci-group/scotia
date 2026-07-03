@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Scotia — Unlock the inner workings of agentic systems. A Semantic Decision Ledger that turns opaque AI execution into a Git-native audit puzzle.">
+    <title>Scotia — The Semantic Decision Ledger</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.85em' font-size='80'>🧩</text></svg>">
+</head>
+<body>
+    <div class="ambient-glow"></div>
+    <div class="grid-overlay"></div>
+
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="#" class="logo">
+                <span class="logo-mark">🧩</span>
+                <span class="logo-text">Scotia</span>
+            </a>
+            <nav class="nav" aria-label="Primary">
+                <a href="#mechanism">Mechanism</a>
+                <a href="#agents">Agents</a>
+                <a href="#downloads">Downloads</a>
+                <a href="#install">Install</a>
+                <a href="#docs">Docs</a>
+            </nav>
+            <div class="header-actions">
+                <button class="theme-toggle" aria-label="Toggle theme" title="Toggle theme">
+                    <span class="theme-icon light">☀</span>
+                    <span class="theme-icon dark">☾</span>
+                </button>
+                <a href="https://github.com/scotia/scotia" class="btn btn-secondary">GitHub</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="container hero-inner">
+                <div class="hero-content">
+                    <div class="badge">
+                        <span class="pulse"></span>
+                        Rust · Git-native · OpenTelemetry-inspired
+                    </div>
+                    <h1>
+                        <span class="line">Unlock the box</span>
+                        <span class="line accent">inside every agent run.</span>
+                    </h1>
+                    <p class="lead">
+                        Scotia is a <strong>Semantic Decision Ledger</strong>. It does not pry open hidden chain-of-thought.
+                        Instead, it maps the telemetry agents already emit—tool calls, routing, state changes, retries—into
+                        a deterministic, diffable, Git-backed artifact.
+                    </p>
+                    <div class="hero-actions">
+                        <a href="#downloads" class="btn btn-primary">Open the box</a>
+                        <a href="#mechanism" class="btn btn-ghost">How it turns</a>
+                    </div>
+                    <div class="stats">
+                        <div class="stat">
+                            <span class="stat-value">6</span>
+                            <span class="stat-label">Agent faces</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value">149+</span>
+                            <span class="stat-label">Tested mechanisms</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value">9</span>
+                            <span class="stat-label">Event glyphs</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="hero-visual">
+                    <div class="puzzlebox" id="puzzlebox" aria-hidden="true">
+                        <div class="box-face face-front"></div>
+                        <div class="box-face face-back"></div>
+                        <div class="box-face face-right"></div>
+                        <div class="box-face face-left"></div>
+                        <div class="box-face face-top"></div>
+                        <div class="box-face face-bottom"></div>
+                        <div class="box-runes">
+                            <span class="rune">⌘</span>
+                            <span class="rune">⚡</span>
+                            <span class="rune">⟲</span>
+                            <span class="rune">✦</span>
+                        </div>
+                    </div>
+                    <div class="terminal">
+                        <div class="terminal-header">
+                            <span class="dot red"></span>
+                            <span class="dot yellow"></span>
+                            <span class="dot green"></span>
+                            <span class="terminal-title">scotia run</span>
+                        </div>
+                        <pre class="terminal-body"><code><span class="prompt">$</span> scotia run --agent claude-code -- claude
+<span class="output">› Read: src/auth.rs
+› Edit: src/auth.rs
+› Model routed: groq
+
+Scotia captured run 4c12196d-...
+  JSON:    scotia-log/2026-07-03/run_4c12196d.json
+  Summary: scotia-log/2026-07-03/run_4c12196d.summary.md
+  Graph:   scotia-log/2026-07-03/run_4c12196d.dot</span></code></pre>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="mechanism" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-tag">The mechanism</span>
+                    <h2>Every agent run is a puzzle with a hidden key</h2>
+                    <p>Modern agents do not expose internal reasoning as a stable interface. Scotia reconstructs intent from the structured traces they cannot help but leave behind.</p>
+                </div>
+                <div class="mechanism-grid">
+                    <div class="mechanism-card">
+                        <div class="card-icon">🧲</div>
+                        <h3>Intercept telemetry, not thought</h3>
+                        <p>Wrap any supported agent. Scotia tees stdout/stderr and parses tool calls, routing hints, and state changes.</p>
+                    </div>
+                    <div class="mechanism-card">
+                        <div class="card-icon">⚙️</div>
+                        <h3>Normalize to a canonical algebra</h3>
+                        <p>Sort, deduplicate, and coalesce raw events into nine semantic event types that reconstruct execution as state transitions.</p>
+                    </div>
+                    <div class="mechanism-card">
+                        <div class="card-icon">🔮</div>
+                        <h3>Synthesize post-hoc rationale</h3>
+                        <p>Generate Markdown summaries and Graphviz DOT graphs that explain what happened without inventing hidden reasoning.</p>
+                    </div>
+                    <div class="mechanism-card">
+                        <div class="card-icon">🔒</div>
+                        <h3>Commit to Git as evidence</h3>
+                        <p>Each run becomes a deterministic artifact under <code>scotia-log/</code>: JSON event log, human summary, and action graph.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="glyphs" class="section section-alt">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-tag">Event glyphs</span>
+                    <h2>Nine glyphs describe any agent execution</h2>
+                </div>
+                <div class="glyph-ring" id="glyphRing">
+                    <div class="glyph" data-glyph="run_started"><span class="glyph-symbol">▶</span><span class="glyph-name">run_started</span></div>
+                    <div class="glyph" data-glyph="prompt_submitted"><span class="glyph-symbol">⌨</span><span class="glyph-name">prompt_submitted</span></div>
+                    <div class="glyph" data-glyph="action_invoked"><span class="glyph-symbol">⚒</span><span class="glyph-name">action_invoked</span></div>
+                    <div class="glyph" data-glyph="action_result"><span class="glyph-symbol">✓</span><span class="glyph-name">action_result</span></div>
+                    <div class="glyph" data-glyph="model_routed"><span class="glyph-symbol">⇄</span><span class="glyph-name">model_routed</span></div>
+                    <div class="glyph" data-glyph="response_chunk"><span class="glyph-symbol">❝</span><span class="glyph-name">response_chunk</span></div>
+                    <div class="glyph" data-glyph="error_or_retry"><span class="glyph-symbol">↻</span><span class="glyph-name">error_or_retry</span></div>
+                    <div class="glyph" data-glyph="state_delta"><span class="glyph-symbol">Δ</span><span class="glyph-name">state_delta</span></div>
+                    <div class="glyph" data-glyph="run_finished"><span class="glyph-symbol">⏹</span><span class="glyph-name">run_finished</span></div>
+                </div>
+                <div class="glyph-detail" id="glyphDetail">
+                    <p>Hover or focus a glyph to see how it fits into the ledger.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="agents" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-tag">Supported agents</span>
+                    <h2>Six faces, one key</h2>
+                </div>
+                <div class="agent-grid">
+                    <div class="agent-card"><span class="agent-name">Claude Code</span><span class="agent-status">supported</span></div>
+                    <div class="agent-card"><span class="agent-name">Kimi Code</span><span class="agent-status">supported</span></div>
+                    <div class="agent-card"><span class="agent-name">Codex</span><span class="agent-status">supported</span></div>
+                    <div class="agent-card"><span class="agent-name">agy</span><span class="agent-status">supported</span></div>
+                    <div class="agent-card"><span class="agent-name">cosine</span><span class="agent-status">supported</span></div>
+                    <div class="agent-card"><span class="agent-name">opencode</span><span class="agent-status">supported</span></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="downloads" class="section section-alt">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-tag">Downloads</span>
+                    <h2>Take the key with you</h2>
+                    <p>Pre-built binaries and installers generated from the latest release.</p>
+                </div>
+                <div class="download-grid">
+                    <div class="download-card featured">
+                        <div class="download-icon">🐧</div>
+                        <h3>Linux x64 binary</h3>
+                        <p class="download-meta">6.4 MB · ELF64 · x86-64</p>
+                        <a href="downloads/scotia-linux-x64" download class="btn btn-primary">Download binary</a>
+                    </div>
+                    <div class="download-card">
+                        <div class="download-icon">📦</div>
+                        <h3>Linux tarball</h3>
+                        <p class="download-meta">2.3 MB · binary + installer</p>
+                        <a href="downloads/scotia-linux-x64.tar.gz" download class="btn btn-secondary">Download .tar.gz</a>
+                    </div>
+                    <div class="download-card">
+                        <div class="download-icon">🚀</div>
+                        <h3>Install script</h3>
+                        <p class="download-meta">curl/wget installer</p>
+                        <a href="downloads/install-scotia.sh" download class="btn btn-secondary">install-scotia.sh</a>
+                    </div>
+                </div>
+                <div class="quick-install">
+                    <h3>One-line install</h3>
+                    <div class="code-block">
+                        <pre><code id="installLine">curl -fsSL https://scotia.tech/downloads/install-scotia.sh | bash</code></pre>
+                        <button class="copy-btn" aria-label="Copy install command" data-copy="curl -fsSL https://scotia.tech/downloads/install-scotia.sh | bash">Copy</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="install" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-tag">Get started</span>
+                    <h2>Three turns of the mechanism</h2>
+                </div>
+                <div class="install-steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <h3>Install Scotia</h3>
+                        <div class="code-block">
+                            <pre><code>curl -fsSL https://scotia.tech/downloads/install-scotia.sh | bash</code></pre>
+                            <button class="copy-btn" aria-label="Copy install command">Copy</button>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <h3>Wrap any agent</h3>
+                        <div class="code-block">
+                            <pre><code>scotia run --agent claude-code -- claude</code></pre>
+                            <button class="copy-btn" aria-label="Copy run command">Copy</button>
+                        </div>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <h3>Inspect the ledger</h3>
+                        <div class="code-block">
+                            <pre><code>scotia list
+scotia summary scotia-log/2026-07-03/run_*.json</code></pre>
+                            <button class="copy-btn" aria-label="Copy inspect commands">Copy</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="docs" class="section section-alt">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-tag">Documentation</span>
+                    <h2>What you can build with the ledger</h2>
+                </div>
+                <div class="feature-grid">
+                    <div class="feature">
+                        <h3>🔍 Debugger for agent cognition</h3>
+                        <p>Reconstruct "thought" from action graphs, retries, and tool selection patterns rather than hidden reasoning.</p>
+                    </div>
+                    <div class="feature">
+                        <h3>🧪 Regression test generator</h3>
+                        <p>Turn any captured run into deterministic assertions: expected tools, model routes, state changes, and error counts.</p>
+                    </div>
+                    <div class="feature">
+                        <h3>📋 Compliance audit layer</h3>
+                        <p>Every code change driven by an LLM is accompanied by a Git-storable decision graph and diffable event log.</p>
+                    </div>
+                    <div class="feature">
+                        <h3>🧠 Cross-model orchestration memory</h3>
+                        <p>Track why Groq, Ollama, OpenAI, or local models were chosen for each stage and how fallback chains behaved.</p>
+                    </div>
+                </div>
+                <div class="cta">
+                    <a href="docs/" class="btn btn-primary">Read the docs</a>
+                    <a href="https://github.com/scotia/scotia" class="btn btn-secondary">View on GitHub</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <p>© 2026 Scotia Contributors. Built with Rust and a healthy skepticism of chain-of-thought interception.</p>
+            <div class="footer-links">
+                <a href="https://github.com/scotia/scotia">GitHub</a>
+                <a href="docs/">Docs</a>
+                <a href="https://github.com/scotia/scotia/issues">Issues</a>
+                <a href="downloads/">Downloads</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
