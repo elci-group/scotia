@@ -1,6 +1,7 @@
 use crate::event::AgentKind;
 use std::fmt;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Maritime severity levels for the Nova Scotia notification theme.
@@ -127,14 +128,14 @@ impl Notifier for DesktopNotifier {
 }
 
 /// Pick the best notifier available on this build.
-pub fn default_notifier() -> Box<dyn Notifier> {
+pub fn default_notifier() -> Arc<dyn Notifier> {
     #[cfg(feature = "notify")]
     {
-        Box::new(DesktopNotifier::new("Scotia"))
+        Arc::new(DesktopNotifier::new("Scotia"))
     }
     #[cfg(not(feature = "notify"))]
     {
-        Box::new(TerminalNotifier)
+        Arc::new(TerminalNotifier)
     }
 }
 

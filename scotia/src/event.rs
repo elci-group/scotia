@@ -234,8 +234,8 @@ pub struct ScotiaRun {
 }
 
 impl ScotiaRun {
-    pub fn new(agent: AgentKind, task: Option<String>) -> Self {
-        let run_id = Uuid::new_v4();
+    pub fn new(agent: AgentKind, task: Option<String>, run_id: Option<Uuid>) -> Self {
+        let run_id = run_id.unwrap_or_else(Uuid::new_v4);
         let started_at = Utc::now();
         Self {
             run_id,

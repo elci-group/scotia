@@ -17,13 +17,14 @@ pub struct WrapperConfig {
     pub program: String,
     pub args: Vec<String>,
     pub working_dir: Option<std::path::PathBuf>,
+    pub run_id: Option<uuid::Uuid>,
 }
 
 pub type SharedInterceptor = Arc<Mutex<Box<dyn AgentInterceptor>>>;
 
 /// Spawn the agent, tee its stdio through Scotia, and return the captured run.
 pub async fn run_and_capture(config: WrapperConfig) -> Result<ScotiaRun> {
-    let run = ScotiaRun::new(config.agent, config.task.clone());
+    let run = ScotiaRun::new(config.agent, config.task.clone(), config.run_id);
     let run_id = run.run_id;
     let ctx = InterceptorContext {
         run_id,

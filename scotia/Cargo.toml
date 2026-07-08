@@ -30,6 +30,10 @@ uuid = { version = "1.9", features = ["v4", "serde"] }
 name = "scotia-shim"
 path = "src/bin/scotia-shim.rs"
 
+[[bin]]
+name = "scotiad"
+path = "src/bin/scotiad.rs"
+
 [features]
 default = ["notify"]
 notify = ["dep:notify-rust"]

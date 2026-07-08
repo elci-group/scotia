@@ -1,5 +1,7 @@
 use crate::algebra::{diff_runs, regression_suite, render_regression_suite, validate};
 use crate::event::{AgentKind, ScotiaEvent};
+use crate::ipc::{DaemonRequest, DaemonResponse, default_log_file, default_pid_file, default_socket_path};
+use crate::ipc_transport::{request, try_connect, register_run as daemon_register_run, finish_run as daemon_finish_run};
 use crate::notify::{Notifier, default_notifier, run_crashed, run_finished, run_started};
 use crate::shim::{
     DEFAULT_AGENT_NAMES, default_shim_dir, detect_aliases, find_scotia_shim_binary,
@@ -11,7 +13,9 @@ use crate::wrapper::{WrapperConfig, run_and_capture};
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
+use uuid::Uuid;
 
 #[derive(Parser)]
 #[command(name = "scotia")]
@@ -109,6 +113,24 @@ enum Commands {
         #[command(subcommand)]
         command: Option<NotifyCommands>,
     },
+
+    /// Control the Scotia daemon.
+    Daemon {
+        #[command(subcommand)]
+        command: DaemonCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum DaemonCommands {
+    /// Start the daemon in the background.
+    Start,
+    /// Stop the running daemon.
+    Stop,
+    /// Show daemon status and recent runs.
+    Status,
+    /// Tail the daemon log.
+    Logs,
 }
 
 #[derive(Subcommand)]
@@ -129,8 +151,8 @@ pub async fn main() -> Result<()> {
         root: cli.log_root,
         commit_to_git: cli.git_commit,
     };
-    let notifier: Box<dyn Notifier> = if cli.no_notify {
-        Box::new(crate::notify::TerminalNotifier)
+    let notifier: Arc<dyn Notifier> = if cli.no_notify {
+        Arc::new(crate::notify::TerminalNotifier)
     } else {
         default_notifier()
     };
@@ -152,12 +174,23 @@ pub async fn main() -> Result<()> {
                 .clone()
                 .or_else(|| std::env::current_dir().ok())
                 .unwrap_or_else(|| PathBuf::from("."));
+            let run_id = Uuid::new_v4();
+            let socket_path = default_socket_path();
 
+            // Notify locally and register with the daemon (best effort).
             notifier.notify(run_started(
                 agent_kind,
                 &working_dir,
                 task.as_deref(),
             ))?;
+            daemon_register_run(
+                &socket_path,
+                run_id,
+                agent_kind,
+                task.clone(),
+                working_dir.clone(),
+            )
+            .await;
 
             let config = WrapperConfig {
                 agent: agent_kind,
@@ -165,6 +198,7 @@ pub async fn main() -> Result<()> {
                 program,
                 args,
                 working_dir: cwd,
+                run_id: Some(run_id),
             };
 
             let run = run_and_capture(config).await?;
@@ -208,7 +242,17 @@ pub async fn main() -> Result<()> {
             } else {
                 run_finished(agent_kind, actions, models, errors, retries)
             };
-            notifier.notify(finish_note)?;
+            notifier.notify(finish_note.clone())?;
+            daemon_finish_run(
+                &socket_path,
+                run_id,
+                exit_code,
+                actions,
+                models,
+                errors,
+                retries,
+            )
+            .await;
 
             let stored = store_run(&storage_config, run).await?;
 
@@ -323,7 +367,127 @@ pub async fn main() -> Result<()> {
                 }
             }
         },
+        Some(Commands::Daemon { command }) => {
+            handle_daemon_command(command).await?;
+        }
     }
 
     Ok(())
+}
+
+async fn handle_daemon_command(command: DaemonCommands) -> Result<()> {
+    let socket_path = default_socket_path();
+    let pid_file = default_pid_file();
+    let log_file = default_log_file();
+
+    match command {
+        DaemonCommands::Start => {
+            if try_connect(&socket_path).await.is_some() {
+                println!("scotiad is already running");
+                return Ok(());
+            }
+            if let Some(parent) = log_file.parent() {
+                tokio::fs::create_dir_all(parent).await.ok();
+            }
+            let scotiad = std::env::current_exe()?
+                .parent()
+                .map(|p| p.join("scotiad"))
+                .filter(|p| p.exists())
+                .unwrap_or_else(|| PathBuf::from("scotiad"));
+
+            let log = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_file)
+                .with_context(|| format!("failed to open daemon log {}", log_file.display()))?;
+
+            let mut cmd = tokio::process::Command::new(scotiad);
+            cmd.arg("--socket")
+                .arg(&socket_path)
+                .arg("--pid-file")
+                .arg(&pid_file)
+                .stdout(std::process::Stdio::from(log.try_clone()?))
+                .stderr(std::process::Stdio::from(log))
+                .kill_on_drop(false);
+
+            let child = cmd.spawn().context("failed to spawn scotiad")?;
+            println!("Started scotiad (PID {})", child.id().unwrap_or(0));
+        }
+        DaemonCommands::Stop => {
+            let pid: Option<i32> = if pid_file.exists() {
+                tokio::fs::read_to_string(&pid_file)
+                    .await
+                    .ok()
+                    .and_then(|s| s.trim().parse().ok())
+            } else {
+                None
+            };
+
+            if let Some(pid) = pid {
+                std::process::Command::new("kill")
+                    .arg("-TERM")
+                    .arg(pid.to_string())
+                    .status()
+                    .context("failed to send SIGTERM to scotiad")?;
+                println!("Sent SIGTERM to scotiad (PID {})", pid);
+            } else {
+                println!("No PID file found; scotiad may not be running");
+            }
+        }
+        DaemonCommands::Status => {
+            let mut stream = match try_connect(&socket_path).await {
+                Some(s) => s,
+                None => {
+                    println!("scotiad is not running");
+                    return Ok(());
+                }
+            };
+            let resp = request(&mut stream, DaemonRequest::Ping).await?;
+            match resp {
+                DaemonResponse::Pong => println!("scotiad is running"),
+                _ => println!("unexpected response from scotiad"),
+            }
+
+            let resp = request(&mut stream, DaemonRequest::ListRuns).await?;
+            if let DaemonResponse::Runs { runs } = resp {
+                let active = runs.iter().filter(|r| r.is_active()).count();
+                println!("Active runs: {}", active);
+                println!("Recent runs:");
+                for run in runs.iter().take(10) {
+                    let status = if run.is_active() {
+                        "active".to_string()
+                    } else {
+                        format!("finished (exit {})", run.exit_code.unwrap_or(-1))
+                    };
+                    println!(
+                        "  {} — {} — {} — {}",
+                        run.run_id.to_string().split('-').next().unwrap_or("?"),
+                        run.agent.as_str(),
+                        status,
+                        format_duration(run.duration().to_std().unwrap_or_default())
+                    );
+                }
+            }
+        }
+        DaemonCommands::Logs => {
+            if log_file.exists() {
+                let contents = tokio::fs::read_to_string(&log_file).await?;
+                print!("{}", contents);
+            } else {
+                println!("No daemon log found at {}", log_file.display());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn format_duration(d: std::time::Duration) -> String {
+    let secs = d.as_secs();
+    if secs < 60 {
+        format!("{}s", secs)
+    } else if secs < 3600 {
+        format!("{}m {}s", secs / 60, secs % 60)
+    } else {
+        format!("{}h {}m {}s", secs / 3600, (secs % 3600) / 60, secs % 60)
+    }
 }

@@ -297,6 +297,7 @@ async fn run_harness(
         program: harness.binary.display().to_string(),
         args: harness.args.clone(),
         working_dir: None,
+        run_id: None,
     };
 
     app.ran_harness = true;
