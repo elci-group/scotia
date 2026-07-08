@@ -2,7 +2,7 @@ mod common;
 
 use proptest::prelude::*;
 use scotia::event::{AgentKind, ErrorKind, ScotiaEvent};
-use scotia::interceptor::{build_interceptor, AgentInterceptor, InterceptorContext, StreamSource};
+use scotia::interceptor::{AgentInterceptor, InterceptorContext, StreamSource, build_interceptor};
 use std::collections::HashMap;
 
 fn ctx(agent: AgentKind) -> InterceptorContext {
@@ -51,24 +51,29 @@ fn generic_garbled_and_long_lines() {
 
     let long = common::big_text(5_000);
     let events = interceptor.parse_line(&ctx, StreamSource::Stdout, &long);
-    assert_eq!(events.len(), 1, "long stdout line should become one ResponseChunk");
+    assert_eq!(
+        events.len(),
+        1,
+        "long stdout line should become one ResponseChunk"
+    );
     assert!(
         matches!(events[0], ScotiaEvent::ResponseChunk { .. }),
         "expected ResponseChunk for stdout"
     );
 
     let events = interceptor.parse_line(&ctx, StreamSource::Stderr, &long);
-    assert_eq!(events.len(), 1, "long stderr line should become one ErrorOrRetry");
+    assert_eq!(
+        events.len(),
+        1,
+        "long stderr line should become one ErrorOrRetry"
+    );
     assert!(
         matches!(events[0], ScotiaEvent::ErrorOrRetry { .. }),
         "expected ErrorOrRetry for stderr"
     );
 
     let events = interceptor.parse_line(&ctx, StreamSource::Stderr, "short");
-    assert!(
-        events.is_empty(),
-        "short stderr noise should be suppressed"
-    );
+    assert!(events.is_empty(), "short stderr noise should be suppressed");
 
     let events = interceptor.parse_side_channel(&ctx, r#"{"tool":"x"}"#);
     assert_eq!(events.len(), 1);
@@ -120,7 +125,11 @@ fn kimi_large_diff_accumulates_and_flushes() {
 
     assert_eq!(path.as_deref(), Some("src/big.rs"));
     let diff = diff.expect("diff buffer should be present");
-    assert_eq!(diff.lines().count(), N, "diff should contain every accumulated line");
+    assert_eq!(
+        diff.lines().count(),
+        N,
+        "diff should contain every accumulated line"
+    );
 
     let chunk = events
         .iter()
@@ -133,9 +142,13 @@ fn kimi_large_diff_accumulates_and_flushes() {
 
     let final_events = interceptor.finalize(&ctx, Some(0));
     assert!(
-        final_events
-            .iter()
-            .any(|e| matches!(e, ScotiaEvent::RunFinished { exit_code: Some(0), .. })),
+        final_events.iter().any(|e| matches!(
+            e,
+            ScotiaEvent::RunFinished {
+                exit_code: Some(0),
+                ..
+            }
+        )),
         "finalize should emit RunFinished with exit code 0"
     );
 }
@@ -172,7 +185,10 @@ fn agy_malformed_and_mixed_payloads() {
     }
 
     assert_eq!(action_count, 3, "expected three ActionInvoked events");
-    assert!(total_events >= action_count, "events should not be negative");
+    assert!(
+        total_events >= action_count,
+        "events should not be negative"
+    );
 }
 
 /// 5. Codex interceptor: very long response lines are preserved, bracketed tools accept
@@ -186,7 +202,11 @@ fn codex_very_long_line_and_diff_flush() {
     let events = interceptor.parse_line(&ctx, StreamSource::Stdout, &long);
     assert_eq!(events.len(), 1);
     if let ScotiaEvent::ResponseChunk { content, .. } = &events[0] {
-        assert_eq!(content.len(), long.len(), "long response content must be preserved");
+        assert_eq!(
+            content.len(),
+            long.len(),
+            "long response content must be preserved"
+        );
     } else {
         panic!("expected ResponseChunk for long line");
     }
@@ -210,13 +230,19 @@ fn codex_very_long_line_and_diff_flush() {
 
     let final_events = interceptor.finalize(&ctx, Some(0));
     assert!(
-        final_events.iter().any(|e| matches!(e, ScotiaEvent::StateDelta { .. })),
+        final_events
+            .iter()
+            .any(|e| matches!(e, ScotiaEvent::StateDelta { .. })),
         "finalize should flush buffered diff"
     );
     assert!(
-        final_events
-            .iter()
-            .any(|e| matches!(e, ScotiaEvent::RunFinished { exit_code: Some(0), .. })),
+        final_events.iter().any(|e| matches!(
+            e,
+            ScotiaEvent::RunFinished {
+                exit_code: Some(0),
+                ..
+            }
+        )),
         "finalize should emit RunFinished"
     );
 }
@@ -273,7 +299,9 @@ fn claude_garbled_and_routing() {
 
     let events = interceptor.parse_line(&ctx, StreamSource::Stdout, "Using model: claude");
     assert!(
-        !events.iter().any(|e| matches!(e, ScotiaEvent::ModelRouted { .. })),
+        !events
+            .iter()
+            .any(|e| matches!(e, ScotiaEvent::ModelRouted { .. })),
         "routing to claude itself should not be classified as ModelRouted"
     );
 
@@ -293,13 +321,18 @@ fn claude_garbled_and_routing() {
 
     let events = interceptor.parse_line(&ctx, StreamSource::Stdout, "done");
     assert!(
-        events.iter().any(|e| matches!(e, ScotiaEvent::StateDelta { .. })),
+        events
+            .iter()
+            .any(|e| matches!(e, ScotiaEvent::StateDelta { .. })),
         "non-diff line should flush buffered diff"
     );
 
     for _ in 0..500 {
         let events = interceptor.parse_line(&ctx, StreamSource::Stdout, "!!!??? ::: ::");
-        assert!(events.len() <= 1, "garbage should produce at most one chunk");
+        assert!(
+            events.len() <= 1,
+            "garbage should produce at most one chunk"
+        );
     }
 }
 
@@ -310,9 +343,16 @@ fn opencode_explicit_markers_and_retries() {
     let ctx = ctx(AgentKind::Opencode);
     let mut interceptor = build_interceptor(AgentKind::Opencode);
 
-    let events = interceptor.parse_line(&ctx, StreamSource::Stdout, "[RETRY] [5] connection timed out");
+    let events = interceptor.parse_line(
+        &ctx,
+        StreamSource::Stdout,
+        "[RETRY] [5] connection timed out",
+    );
     assert_eq!(events.len(), 1);
-    if let ScotiaEvent::ErrorOrRetry { kind, retry_count, .. } = &events[0] {
+    if let ScotiaEvent::ErrorOrRetry {
+        kind, retry_count, ..
+    } = &events[0]
+    {
         assert_eq!(*kind, ErrorKind::Retry);
         assert_eq!(*retry_count, Some(5));
     } else {
@@ -321,13 +361,23 @@ fn opencode_explicit_markers_and_retries() {
 
     let events = interceptor.parse_line(&ctx, StreamSource::Stdout, "[ERROR] disk full");
     assert_eq!(events.len(), 1);
-    assert!(matches!(&events[0], ScotiaEvent::ErrorOrRetry { kind: ErrorKind::ToolError, .. }));
+    assert!(matches!(
+        &events[0],
+        ScotiaEvent::ErrorOrRetry {
+            kind: ErrorKind::ToolError,
+            ..
+        }
+    ));
 
     let events = interceptor.parse_line(&ctx, StreamSource::Stdout, "[TOOL] bash: ls -la");
     assert_eq!(events.len(), 1);
     assert!(matches!(events[0], ScotiaEvent::ActionInvoked { .. }));
 
-    let events = interceptor.parse_line(&ctx, StreamSource::Stdout, "[RESULT] status: success exit_code: 0");
+    let events = interceptor.parse_line(
+        &ctx,
+        StreamSource::Stdout,
+        "[RESULT] status: success exit_code: 0",
+    );
     assert_eq!(events.len(), 1);
     assert!(matches!(events[0], ScotiaEvent::ActionResult { .. }));
 
@@ -344,7 +394,9 @@ fn opencode_explicit_markers_and_retries() {
 
     let events = interceptor.parse_line(&ctx, StreamSource::Stdout, "");
     assert!(
-        events.iter().any(|e| matches!(e, ScotiaEvent::StateDelta { .. })),
+        events
+            .iter()
+            .any(|e| matches!(e, ScotiaEvent::StateDelta { .. })),
         "blank line should flush buffered diff"
     );
 }

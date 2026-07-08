@@ -9,7 +9,9 @@ use tempfile::TempDir;
 use uuid::Uuid;
 
 mod common;
-use common::{action_invoked, action_result, big_text, empty_run, finish, model_routed, state_delta};
+use common::{
+    action_invoked, action_result, big_text, empty_run, finish, model_routed, state_delta,
+};
 
 /// Return the path to the `scotia` binary compiled for this test run.
 fn scotia_bin() -> PathBuf {
@@ -22,11 +24,10 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<std::ffi::OsStr>,
 {
-    let output = Command::new(scotia_bin())
+    Command::new(scotia_bin())
         .args(args)
         .output()
-        .expect("failed to execute scotia binary");
-    output
+        .expect("failed to execute scotia binary")
 }
 
 /// Find the most recently written `.json` run file under a log root.
@@ -87,7 +88,11 @@ fn cli_run(root: &Path, agent: &str, task: &str, program: &str, args: &[&str]) -
         stderr
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Scotia captured run"), "unexpected run output: {}", stdout);
+    assert!(
+        stdout.contains("Scotia captured run"),
+        "unexpected run output: {}",
+        stdout
+    );
 
     latest_json(root)
 }
@@ -95,7 +100,13 @@ fn cli_run(root: &Path, agent: &str, task: &str, program: &str, args: &[&str]) -
 #[test]
 fn run_captures_echo_and_creates_artifacts() {
     let (_dir, root) = temp_log_root();
-    let json = cli_run(&root, "generic", "echo smoke", "/bin/sh", &["-c", "echo 'hello scotia'"]);
+    let json = cli_run(
+        &root,
+        "generic",
+        "echo smoke",
+        "/bin/sh",
+        &["-c", "echo 'hello scotia'"],
+    );
 
     assert!(json.exists());
     let summary = json.with_extension("summary.md");
@@ -110,7 +121,11 @@ fn run_captures_echo_and_creates_artifacts() {
         &json.to_string_lossy(),
     ]);
     let validate = String::from_utf8_lossy(&validate_out.stdout);
-    assert!(validate.contains("structurally valid"), "validate output: {}", validate);
+    assert!(
+        validate.contains("structurally valid"),
+        "validate output: {}",
+        validate
+    );
 }
 
 #[test]
@@ -121,12 +136,19 @@ fn run_stderr_classifies_long_errors() {
         "generic",
         "stderr smoke",
         "/bin/sh",
-        &["-c", "echo 'stdout line'; echo 'this is a simulated long stderr error message' >&2"],
+        &[
+            "-c",
+            "echo 'stdout line'; echo 'this is a simulated long stderr error message' >&2",
+        ],
     );
 
     let run_value: Value = serde_json::from_str(&fs::read_to_string(&json).unwrap()).unwrap();
     let errors = run_value["metadata"]["error_count"].as_u64().unwrap_or(0);
-    assert!(errors >= 1, "expected at least one classified error, got {}", errors);
+    assert!(
+        errors >= 1,
+        "expected at least one classified error, got {}",
+        errors
+    );
 
     let reg_out = scotia([
         "--log-root",
@@ -150,7 +172,13 @@ fn list_reports_runs() {
     let empty_stdout = String::from_utf8_lossy(&empty.stdout);
     assert!(empty_stdout.contains("No Scotia runs found"));
 
-    cli_run(&root, "generic", "list smoke", "/bin/sh", &["-c", "echo listed"]);
+    cli_run(
+        &root,
+        "generic",
+        "list smoke",
+        "/bin/sh",
+        &["-c", "echo listed"],
+    );
 
     let populated = scotia(["--log-root", &root.to_string_lossy(), "list"]);
     let populated_stdout = String::from_utf8_lossy(&populated.stdout);
@@ -161,7 +189,13 @@ fn list_reports_runs() {
 #[test]
 fn validate_detects_orphan_action_result() {
     let (_dir, root) = temp_log_root();
-    let json = cli_run(&root, "generic", "validate orphan", "/bin/sh", &["-c", "echo ok"]);
+    let json = cli_run(
+        &root,
+        "generic",
+        "validate orphan",
+        "/bin/sh",
+        &["-c", "echo ok"],
+    );
 
     let mut run_value: Value = serde_json::from_str(&fs::read_to_string(&json).unwrap()).unwrap();
     let run_id = run_value["run_id"].as_str().unwrap().to_string();
@@ -180,7 +214,12 @@ fn validate_detects_orphan_action_result() {
     );
     fs::write(&json, serde_json::to_string_pretty(&run_value).unwrap()).unwrap();
 
-    let out = scotia(["--log-root", &root.to_string_lossy(), "validate", &json.to_string_lossy()]);
+    let out = scotia([
+        "--log-root",
+        &root.to_string_lossy(),
+        "validate",
+        &json.to_string_lossy(),
+    ]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains("OrphanedActionResult") || stdout.contains("validation issue"),
@@ -212,12 +251,36 @@ fn diff_reports_action_and_model_differences() {
     let out = scotia(["--log-root", &root.to_string_lossy(), "diff", &left, &right]);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    assert!(stdout.contains("read:src/a.rs"), "left-only action missing: {}", stdout);
-    assert!(stdout.contains("write:src/b.rs"), "right-only action missing: {}", stdout);
-    assert!(stdout.contains("planner"), "left-only model missing: {}", stdout);
-    assert!(stdout.contains("gpt-4"), "left-only model missing: {}", stdout);
-    assert!(stdout.contains("executor"), "right-only model missing: {}", stdout);
-    assert!(stdout.contains("claude-3"), "right-only model missing: {}", stdout);
+    assert!(
+        stdout.contains("read:src/a.rs"),
+        "left-only action missing: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("write:src/b.rs"),
+        "right-only action missing: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("planner"),
+        "left-only model missing: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("gpt-4"),
+        "left-only model missing: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("executor"),
+        "right-only model missing: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("claude-3"),
+        "right-only model missing: {}",
+        stdout
+    );
 }
 
 #[test]
@@ -236,23 +299,62 @@ fn regression_emits_expected_assertions() {
     let out = scotia(["--log-root", &root.to_string_lossy(), "regression", &json]);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    assert!(stdout.contains("tool_used"), "missing tool_used: {}", stdout);
-    assert!(stdout.contains("model_routed"), "missing model_routed: {}", stdout);
-    assert!(stdout.contains("state_changed"), "missing state_changed: {}", stdout);
-    assert!(stdout.contains("no_errors"), "missing no_errors: {}", stdout);
-    assert!(stdout.contains("action_sequence"), "missing action_sequence: {}", stdout);
+    assert!(
+        stdout.contains("tool_used"),
+        "missing tool_used: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("model_routed"),
+        "missing model_routed: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("state_changed"),
+        "missing state_changed: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("no_errors"),
+        "missing no_errors: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("action_sequence"),
+        "missing action_sequence: {}",
+        stdout
+    );
 }
 
 #[test]
 fn summary_command_renders_markdown() {
     let (_dir, root) = temp_log_root();
-    let json = cli_run(&root, "generic", "summary smoke", "/bin/sh", &["-c", "echo 'summary line'"]);
+    let json = cli_run(
+        &root,
+        "generic",
+        "summary smoke",
+        "/bin/sh",
+        &["-c", "echo 'summary line'"],
+    );
 
-    let out = scotia(["--log-root", &root.to_string_lossy(), "summary", &json.to_string_lossy()]);
+    let out = scotia([
+        "--log-root",
+        &root.to_string_lossy(),
+        "summary",
+        &json.to_string_lossy(),
+    ]);
     let stdout = String::from_utf8_lossy(&out.stdout);
 
-    assert!(stdout.contains("# Scotia Run Summary"), "summary header missing: {}", stdout);
-    assert!(stdout.contains("summary smoke"), "task missing from summary: {}", stdout);
+    assert!(
+        stdout.contains("# Scotia Run Summary"),
+        "summary header missing: {}",
+        stdout
+    );
+    assert!(
+        stdout.contains("summary smoke"),
+        "task missing from summary: {}",
+        stdout
+    );
 }
 
 #[test]

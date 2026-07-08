@@ -20,21 +20,21 @@ impl AgentAdapter for AgyAdapter {
         let trimmed = line.trim();
 
         // agy tends to emit structured JSON lines for tool calls.
-        if trimmed.starts_with('{') && trimmed.ends_with('}') {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                if let Some(tool) = value.get("tool").and_then(|v| v.as_str()) {
-                    events.push(emit_action_invoked(
-                        ctx,
-                        tool,
-                        value
-                            .get("target")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string()),
-                        value.get("arguments").cloned(),
-                    ));
-                    return events;
-                }
-            }
+        if trimmed.starts_with('{')
+            && trimmed.ends_with('}')
+            && let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed)
+            && let Some(tool) = value.get("tool").and_then(|v| v.as_str())
+        {
+            events.push(emit_action_invoked(
+                ctx,
+                tool,
+                value
+                    .get("target")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                value.get("arguments").cloned(),
+            ));
+            return events;
         }
 
         if let Some(cap) = Regex::new(r"(?i)(?:tool|action):\s*(\w+)")

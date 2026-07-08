@@ -59,13 +59,15 @@ pub fn build_interceptor(agent: AgentKind) -> BoxedInterceptor {
     match agent {
         AgentKind::KimiCode => Box::new(crate::interceptors::kimi::KimiInterceptor::default()),
         AgentKind::Agy => Box::new(crate::interceptors::agy::AgyInterceptor::default()),
-        AgentKind::Cosine => Box::new(crate::interceptors::cosine::CosineInterceptor::default()),
+        AgentKind::Cosine => Box::new(crate::interceptors::cosine::CosineInterceptor),
         AgentKind::Codex => Box::new(crate::interceptors::codex::CodexInterceptor::default()),
-        AgentKind::ClaudeCode => Box::new(crate::interceptors::claude::ClaudeInterceptor::default()),
+        AgentKind::ClaudeCode => {
+            Box::new(crate::interceptors::claude::ClaudeInterceptor::default())
+        }
         AgentKind::Opencode => {
             Box::new(crate::interceptors::opencode::OpencodeInterceptor::default())
         }
-        AgentKind::Unknown => Box::new(crate::interceptors::GenericInterceptor::default()),
+        AgentKind::Unknown => Box::new(crate::interceptors::GenericInterceptor),
     }
 }
 

@@ -29,8 +29,7 @@ impl AgentAdapter for CosineAdapter {
             let target = rest
                 .split_whitespace()
                 .find(|t| t.contains('='))
-                .map(|t| t.split_once('=').map(|(_, v)| v.to_string()))
-                .flatten();
+                .and_then(|t| t.split_once('=').map(|(_, v)| v.to_string()));
             let arguments = if rest.is_empty() {
                 None
             } else {

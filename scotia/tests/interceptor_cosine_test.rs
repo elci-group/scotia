@@ -14,7 +14,7 @@ fn ctx() -> InterceptorContext {
 #[test]
 fn parses_read_file_action() {
     let ctx = ctx();
-    let mut interp = CosineInterceptor::default();
+    let mut interp = CosineInterceptor;
     let events = interp.parse_line(
         &ctx,
         StreamSource::Stdout,
@@ -38,7 +38,7 @@ fn parses_read_file_action() {
 #[test]
 fn parses_bash_action_without_explicit_target() {
     let ctx = ctx();
-    let mut interp = CosineInterceptor::default();
+    let mut interp = CosineInterceptor;
     let events = interp.parse_line(&ctx, StreamSource::Stdout, "ACTION bash cargo test");
     assert_eq!(events.len(), 1);
     let ScotiaEvent::ActionInvoked {
@@ -68,7 +68,7 @@ fn parses_model_routing_variants() {
     ];
     for line in variants {
         let ctx = ctx();
-        let mut interp = CosineInterceptor::default();
+        let mut interp = CosineInterceptor;
         let events = interp.parse_line(&ctx, StreamSource::Stdout, line);
         assert_eq!(events.len(), 1, "failed for '{}'", line);
         let ScotiaEvent::ModelRouted { stage, model, .. } = &events[0] else {
@@ -82,7 +82,7 @@ fn parses_model_routing_variants() {
 #[test]
 fn parses_edit_state_delta() {
     let ctx = ctx();
-    let mut interp = CosineInterceptor::default();
+    let mut interp = CosineInterceptor;
     let events = interp.parse_line(
         &ctx,
         StreamSource::Stdout,
@@ -102,7 +102,7 @@ fn parses_edit_state_delta() {
 #[test]
 fn parses_unified_diff_lines() {
     let ctx = ctx();
-    let mut interp = CosineInterceptor::default();
+    let mut interp = CosineInterceptor;
     let events = interp.parse_line(&ctx, StreamSource::Stdout, "--- a/src/main.rs");
     assert_eq!(events.len(), 1);
     let ScotiaEvent::StateDelta { path, diff, .. } = &events[0] else {
@@ -115,7 +115,7 @@ fn parses_unified_diff_lines() {
 #[test]
 fn parses_error_and_retry_signals() {
     let ctx = ctx();
-    let mut interp = CosineInterceptor::default();
+    let mut interp = CosineInterceptor;
 
     let err = interp.parse_line(&ctx, StreamSource::Stdout, "ERROR: file not found");
     assert_eq!(err.len(), 1);
@@ -137,7 +137,7 @@ fn parses_error_and_retry_signals() {
 #[test]
 fn stderr_classified_as_error() {
     let ctx = ctx();
-    let mut interp = CosineInterceptor::default();
+    let mut interp = CosineInterceptor;
     let events = interp.parse_line(&ctx, StreamSource::Stderr, "panic: something went wrong");
     assert_eq!(events.len(), 1);
     let ScotiaEvent::ErrorOrRetry { kind, message, .. } = &events[0] else {
@@ -150,7 +150,7 @@ fn stderr_classified_as_error() {
 #[test]
 fn non_action_stdout_becomes_response_chunk() {
     let ctx = ctx();
-    let mut interp = CosineInterceptor::default();
+    let mut interp = CosineInterceptor;
     let events = interp.parse_line(
         &ctx,
         StreamSource::Stdout,

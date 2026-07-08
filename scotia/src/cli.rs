@@ -1,11 +1,15 @@
 use crate::algebra::{diff_runs, regression_suite, render_regression_suite, validate};
 use crate::event::{AgentKind, ScotiaEvent};
-use crate::ipc::{DaemonRequest, DaemonResponse, default_log_file, default_pid_file, default_socket_path};
-use crate::ipc_transport::{request, try_connect, register_run as daemon_register_run, finish_run as daemon_finish_run};
+use crate::ipc::{
+    DaemonRequest, DaemonResponse, default_log_file, default_pid_file, default_socket_path,
+};
+use crate::ipc_transport::{
+    finish_run as daemon_finish_run, register_run as daemon_register_run, request, try_connect,
+};
 use crate::notify::{Notifier, default_notifier, run_crashed, run_finished, run_started};
 use crate::shim::{
-    DEFAULT_AGENT_NAMES, default_shim_dir, detect_aliases, find_scotia_shim_binary,
-    install_shims, remove_shell_path, uninstall_shims, update_shell_path,
+    DEFAULT_AGENT_NAMES, default_shim_dir, detect_aliases, find_scotia_shim_binary, install_shims,
+    remove_shell_path, uninstall_shims, update_shell_path,
 };
 use crate::storage::{StorageConfig, list_runs, load_run, store_run};
 use crate::tui::run_tui;
@@ -131,6 +135,10 @@ enum DaemonCommands {
     Status,
     /// Tail the daemon log.
     Logs,
+    /// Install the daemon as a user service (systemd/launchd).
+    InstallService,
+    /// Uninstall the daemon user service.
+    UninstallService,
 }
 
 #[derive(Subcommand)]
@@ -178,11 +186,7 @@ pub async fn main() -> Result<()> {
             let socket_path = default_socket_path();
 
             // Notify locally and register with the daemon (best effort).
-            notifier.notify(run_started(
-                agent_kind,
-                &working_dir,
-                task.as_deref(),
-            ))?;
+            notifier.notify(run_started(agent_kind, &working_dir, task.as_deref()))?;
             daemon_register_run(
                 &socket_path,
                 run_id,
@@ -303,7 +307,11 @@ pub async fn main() -> Result<()> {
             if issues.is_empty() {
                 println!("Run {} is structurally valid.", run.run_id);
             } else {
-                println!("Run {} has {} validation issue(s):", run.run_id, issues.len());
+                println!(
+                    "Run {} has {} validation issue(s):",
+                    run.run_id,
+                    issues.len()
+                );
                 for issue in issues {
                     println!("  - {:?}", issue);
                 }
@@ -338,7 +346,11 @@ pub async fn main() -> Result<()> {
             }
             let result = install_shims(&shim_dir, &scotia_shim, DEFAULT_AGENT_NAMES)?;
             update_shell_path(&shim_dir)?;
-            println!("Installed {} shims to {}", result.created.len(), shim_dir.display());
+            println!(
+                "Installed {} shims to {}",
+                result.created.len(),
+                shim_dir.display()
+            );
             if !result.collisions.is_empty() {
                 eprintln!("Warning: existing binaries earlier in PATH:");
                 for c in &result.collisions {
@@ -351,14 +363,22 @@ pub async fn main() -> Result<()> {
             let shim_dir = shim_dir.unwrap_or_else(default_shim_dir);
             let removed = uninstall_shims(&shim_dir, DEFAULT_AGENT_NAMES)?;
             remove_shell_path(&shim_dir)?;
-            println!("Removed {} shims from {}", removed.len(), shim_dir.display());
+            println!(
+                "Removed {} shims from {}",
+                removed.len(),
+                shim_dir.display()
+            );
             notifier.notify(crate::notify::shims_uninstalled())?;
         }
         Some(Commands::Notify { command }) => match command {
             None | Some(NotifyCommands::Test) => {
                 for n in [
                     crate::notify::daemon_started(),
-                    crate::notify::run_started(AgentKind::KimiCode, &std::env::current_dir()?, None),
+                    crate::notify::run_started(
+                        AgentKind::KimiCode,
+                        &std::env::current_dir()?,
+                        None,
+                    ),
                     crate::notify::run_finished(AgentKind::KimiCode, 12, 3, 0, 0),
                     crate::notify::run_finished(AgentKind::Codex, 12, 3, 2, 1),
                     crate::notify::run_crashed(AgentKind::ClaudeCode, Some(1)),
@@ -475,6 +495,23 @@ async fn handle_daemon_command(command: DaemonCommands) -> Result<()> {
                 print!("{}", contents);
             } else {
                 println!("No daemon log found at {}", log_file.display());
+            }
+        }
+        DaemonCommands::InstallService => {
+            let result = crate::service::install_service()?;
+            println!("Installed {} service", result.platform.as_str());
+            if let Some(path) = result.installed_path {
+                println!("  -> {}", path.display());
+            }
+            if !result.output.is_empty() {
+                println!("{}", result.output);
+            }
+        }
+        DaemonCommands::UninstallService => {
+            let result = crate::service::uninstall_service()?;
+            println!("Uninstalled {} service", result.platform.as_str());
+            if !result.output.is_empty() {
+                println!("{}", result.output);
             }
         }
     }

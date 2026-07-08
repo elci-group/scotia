@@ -140,10 +140,10 @@ impl AgentInterceptor for KimiInterceptor {
 
     fn finalize(&mut self, ctx: &InterceptorContext, exit_code: Option<i32>) -> Vec<ScotiaEvent> {
         let mut events = Vec::new();
-        if let Some((path, buf)) = self.diff_buffer.take() {
-            if !buf.is_empty() {
-                events.push(emit_state_delta(ctx, Some(path), Some(buf), None));
-            }
+        if let Some((path, buf)) = self.diff_buffer.take()
+            && !buf.is_empty()
+        {
+            events.push(emit_state_delta(ctx, Some(path), Some(buf), None));
         }
         events.push(ScotiaEvent::RunFinished {
             run_id: ctx.run_id,

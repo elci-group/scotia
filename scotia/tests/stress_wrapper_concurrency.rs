@@ -11,11 +11,7 @@ fn scotia_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_scotia"))
 }
 
-fn run_scotia(
-    program: &str,
-    args: &[&str],
-    stdin: Option<&[u8]>,
-) -> (Output, TempDir, PathBuf) {
+fn run_scotia(program: &str, args: &[&str], stdin: Option<&[u8]>) -> (Output, TempDir, PathBuf) {
     let temp = TempDir::new().expect("temp dir");
     let log_root = temp.path().to_path_buf();
 
@@ -36,9 +32,7 @@ fn run_scotia(
         let mut child = cmd.spawn().expect("spawn scotia");
         {
             let mut child_stdin = child.stdin.take().expect("stdin pipe");
-            child_stdin
-                .write_all(input)
-                .expect("write to scotia stdin");
+            child_stdin.write_all(input).expect("write to scotia stdin");
             // Dropping child_stdin closes the pipe so the wrapped process sees EOF.
         }
         child.wait_with_output().expect("wait for scotia")
@@ -69,7 +63,7 @@ fn parse_json_path(output: &Output) -> PathBuf {
                 String::from_utf8_lossy(&output.stderr)
             )
         });
-    let path = line.splitn(2, "JSON:").nth(1).unwrap().trim();
+    let path = line.split_once("JSON:").unwrap().1.trim();
     PathBuf::from(path)
 }
 
@@ -292,11 +286,7 @@ fn garbled_mixed_sources() {
 fn parallel_wrapper_invocations() {
     std::thread::scope(|s| {
         let handles: Vec<_> = (0..4)
-            .map(|i| {
-                s.spawn(move || {
-                    run_scotia("echo", &[&format!("parallel-run-{i}")], None)
-                })
-            })
+            .map(|i| s.spawn(move || run_scotia("echo", &[&format!("parallel-run-{i}")], None)))
             .collect();
 
         // Keep TempDirs alive alongside their JSON paths so the artifacts are still on disk
@@ -312,9 +302,12 @@ fn parallel_wrapper_invocations() {
             runs.push((temp, json_path));
         }
 
-        let ids: std::collections::HashSet<_> =
-            runs.iter().map(|(_, path)| path.clone()).collect();
-        assert_eq!(ids.len(), 4, "each parallel run should write a distinct artifact");
+        let ids: std::collections::HashSet<_> = runs.iter().map(|(_, path)| path.clone()).collect();
+        assert_eq!(
+            ids.len(),
+            4,
+            "each parallel run should write a distinct artifact"
+        );
 
         for (i, (_, path)) in runs.iter().enumerate() {
             let run = load_run(path);
@@ -322,7 +315,10 @@ fn parallel_wrapper_invocations() {
             let contains_payload = std::fs::read_to_string(path)
                 .expect("read json")
                 .contains(&format!("parallel-run-{i}"));
-            assert!(contains_payload, "run artifact should reference its payload");
+            assert!(
+                contains_payload,
+                "run artifact should reference its payload"
+            );
         }
     });
 }

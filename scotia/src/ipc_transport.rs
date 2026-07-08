@@ -10,8 +10,14 @@ pub async fn request(stream: &mut UnixStream, req: DaemonRequest) -> Result<Daem
         .write_all(line.as_bytes())
         .await
         .context("failed to write IPC request")?;
-    stream.write_all(b"\n").await.context("failed to write newline")?;
-    stream.flush().await.context("failed to flush IPC request")?;
+    stream
+        .write_all(b"\n")
+        .await
+        .context("failed to write newline")?;
+    stream
+        .flush()
+        .await
+        .context("failed to flush IPC request")?;
 
     let mut reader = BufReader::new(stream);
     let mut buf = String::new();
@@ -48,16 +54,16 @@ pub async fn write_response(stream: &mut UnixStream, resp: DaemonResponse) -> Re
         .await
         .context("failed to write IPC response")?;
     stream.write_all(b"\n").await?;
-    stream.flush().await.context("failed to flush IPC response")?;
+    stream
+        .flush()
+        .await
+        .context("failed to flush IPC response")?;
     Ok(())
 }
 
 /// Try to connect to the daemon socket. Returns None if the daemon is not running.
 pub async fn try_connect(socket_path: &std::path::Path) -> Option<UnixStream> {
-    match UnixStream::connect(socket_path).await {
-        Ok(s) => Some(s),
-        Err(_) => None,
-    }
+    UnixStream::connect(socket_path).await.ok()
 }
 
 /// Convenience: register a run with the daemon, ignoring failures.
@@ -104,4 +110,59 @@ pub async fn finish_run(
         finished_at: chrono::Utc::now(),
     };
     let _ = request(&mut stream, req).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::event::AgentKind;
+    use crate::ipc::DaemonRequest;
+    use tokio::net::UnixListener;
+
+    #[tokio::test]
+    async fn request_roundtrip_over_unix_socket() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("test.sock");
+        let listener = UnixListener::bind(&socket_path).unwrap();
+
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let req = read_request(&mut stream).await.unwrap().unwrap();
+            let resp = match req {
+                DaemonRequest::Ping => crate::ipc::DaemonResponse::Pong,
+                _ => crate::ipc::DaemonResponse::Error {
+                    message: "expected ping".to_string(),
+                },
+            };
+            write_response(&mut stream, resp).await.unwrap();
+        });
+
+        let mut client = UnixStream::connect(&socket_path).await.unwrap();
+        let resp = request(&mut client, DaemonRequest::Ping).await.unwrap();
+
+        server.await.unwrap();
+        assert!(matches!(resp, crate::ipc::DaemonResponse::Pong));
+    }
+
+    #[tokio::test]
+    async fn try_connect_returns_none_when_no_daemon() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("missing.sock");
+        assert!(try_connect(&socket_path).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn register_run_ignores_missing_daemon() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("missing.sock");
+        register_run(
+            &socket_path,
+            uuid::Uuid::new_v4(),
+            AgentKind::KimiCode,
+            None,
+            std::path::PathBuf::from("."),
+        )
+        .await;
+        // Should not panic or block.
+    }
 }

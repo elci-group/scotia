@@ -1,20 +1,20 @@
 use chrono::Utc;
 use scotia::algebra::{
-    action_graph, diff_runs, regression_suite, render_regression_suite, validate, Assertion,
-    ValidationIssue,
+    Assertion, ValidationIssue, action_graph, diff_runs, regression_suite, render_regression_suite,
+    validate,
 };
 use scotia::event::{ActionStatus, AgentKind, ScotiaEvent, ScotiaRun};
 
 #[test]
 fn validate_detects_missing_run_finished() {
-    let run = ScotiaRun::new(AgentKind::ClaudeCode, Some("test".to_string()));
+    let run = ScotiaRun::new(AgentKind::ClaudeCode, Some("test".to_string()), None);
     let issues = validate(&run);
     assert!(issues.contains(&ValidationIssue::MissingRunFinished));
 }
 
 #[test]
 fn validate_detects_unmatched_action() {
-    let run = ScotiaRun::new(AgentKind::Codex, Some("test".to_string()));
+    let run = ScotiaRun::new(AgentKind::Codex, Some("test".to_string()), None);
     let mut run = run;
     run.push(ScotiaEvent::ActionInvoked {
         event_id: uuid::Uuid::new_v4(),
@@ -27,15 +27,15 @@ fn validate_detects_unmatched_action() {
     run.finish(Some(0), None);
 
     let issues = validate(&run);
-    assert!(issues
-        .iter()
-        .any(|i| matches!(i, ValidationIssue::UnmatchedActionInvoked { tool, .. } if tool == "bash")));
+    assert!(issues.iter().any(
+        |i| matches!(i, ValidationIssue::UnmatchedActionInvoked { tool, .. } if tool == "bash")
+    ));
 }
 
 #[test]
 fn validate_passes_for_balanced_actions() {
     let run_id = uuid::Uuid::new_v4();
-    let mut run = ScotiaRun::new(AgentKind::KimiCode, Some("test".to_string()));
+    let mut run = ScotiaRun::new(AgentKind::KimiCode, Some("test".to_string()), None);
     run.events = vec![run.events.remove(0)];
 
     let invoke_id = uuid::Uuid::new_v4();
@@ -64,7 +64,7 @@ fn validate_passes_for_balanced_actions() {
 #[test]
 fn action_graph_pairs_invocation_and_result() {
     let run_id = uuid::Uuid::new_v4();
-    let mut run = ScotiaRun::new(AgentKind::ClaudeCode, Some("test".to_string()));
+    let mut run = ScotiaRun::new(AgentKind::ClaudeCode, Some("test".to_string()), None);
     run.events = vec![run.events.remove(0)];
 
     run.push(ScotiaEvent::ActionInvoked {
@@ -104,11 +104,11 @@ fn action_graph_pairs_invocation_and_result() {
 #[test]
 fn diff_runs_detects_added_action_and_model() {
     let run_id = uuid::Uuid::new_v4();
-    let mut left = ScotiaRun::new(AgentKind::Codex, Some("left".to_string()));
+    let mut left = ScotiaRun::new(AgentKind::Codex, Some("left".to_string()), None);
     left.events = vec![left.events.remove(0)];
     left.finish(Some(0), None);
 
-    let mut right = ScotiaRun::new(AgentKind::Codex, Some("right".to_string()));
+    let mut right = ScotiaRun::new(AgentKind::Codex, Some("right".to_string()), None);
     right.events = vec![right.events.remove(0)];
     right.push(ScotiaEvent::ActionInvoked {
         event_id: uuid::Uuid::new_v4(),
@@ -131,13 +131,16 @@ fn diff_runs_detects_added_action_and_model() {
 
     let diff = diff_runs(&left, &right);
     assert_eq!(diff.actions_added, vec!["bash:cargo test"]);
-    assert_eq!(diff.models_added, vec![("planner".to_string(), "groq".to_string())]);
+    assert_eq!(
+        diff.models_added,
+        vec![("planner".to_string(), "groq".to_string())]
+    );
 }
 
 #[test]
 fn regression_suite_includes_tool_model_and_sequence() {
     let run_id = uuid::Uuid::new_v4();
-    let mut run = ScotiaRun::new(AgentKind::ClaudeCode, Some("regression".to_string()));
+    let mut run = ScotiaRun::new(AgentKind::ClaudeCode, Some("regression".to_string()), None);
     run.events = vec![run.events.remove(0)];
 
     run.push(ScotiaEvent::ActionInvoked {
@@ -181,7 +184,11 @@ fn regression_suite_includes_tool_model_and_sequence() {
         model: "ollama".to_string(),
     }));
     assert!(suite.contains(&Assertion::NoErrors));
-    assert!(suite.iter().any(|a| matches!(a, Assertion::ActionSequence { .. })));
+    assert!(
+        suite
+            .iter()
+            .any(|a| matches!(a, Assertion::ActionSequence { .. }))
+    );
 
     let rendered = render_regression_suite(&suite);
     assert!(rendered.contains("tool_used"));

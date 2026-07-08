@@ -114,7 +114,8 @@ fn test_opencode_adapter_parses_tool_line() {
 
 #[test]
 fn test_normalizer_coalesces_response_chunks() {
-    let mut run = scotia::event::ScotiaRun::new(AgentKind::ClaudeCode, Some("test".to_string()));
+    let mut run =
+        scotia::event::ScotiaRun::new(AgentKind::ClaudeCode, Some("test".to_string()), None);
     run.push(scotia::event::ScotiaEvent::ResponseChunk {
         event_id: uuid::Uuid::new_v4(),
         run_id: run.run_id,
@@ -153,7 +154,7 @@ fn test_normalizer_coalesces_response_chunks() {
 fn test_synthesizer_detects_read_then_edit_rationale() {
     use chrono::Utc;
     let mut run =
-        scotia::event::ScotiaRun::new(AgentKind::ClaudeCode, Some("refactor".to_string()));
+        scotia::event::ScotiaRun::new(AgentKind::ClaudeCode, Some("refactor".to_string()), None);
     run.push(scotia::event::ScotiaEvent::ActionInvoked {
         event_id: uuid::Uuid::new_v4(),
         run_id: run.run_id,
@@ -188,6 +189,7 @@ async fn test_wrapper_captures_echo_command() {
         program: "echo".to_string(),
         args: vec!["hello from scotia".to_string()],
         working_dir: None,
+        run_id: None,
     })
     .await
     .expect("wrapper should capture echo");
@@ -209,7 +211,7 @@ async fn test_wrapper_captures_echo_command() {
 #[tokio::test]
 async fn test_storage_writes_run_files() {
     let temp = TempDir::new().unwrap();
-    let run = scotia::event::ScotiaRun::new(AgentKind::Codex, Some("store test".to_string()));
+    let run = scotia::event::ScotiaRun::new(AgentKind::Codex, Some("store test".to_string()), None);
     let config = StorageConfig {
         root: temp.path().join("scotia-log"),
         commit_to_git: false,

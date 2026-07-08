@@ -75,7 +75,9 @@ async fn main() -> Result<()> {
     info!("scotiad listening on {}", socket_path.display());
 
     let notifier: Arc<dyn Notifier> = default_notifier();
-    notifier.notify(daemon_started()).context("failed to emit daemon-started notification")?;
+    notifier
+        .notify(daemon_started())
+        .context("failed to emit daemon-started notification")?;
 
     let daemon = Daemon::new(notifier, args.progress_interval);
     let shutdown = tokio::sync::broadcast::channel(1).0;
@@ -160,14 +162,12 @@ async fn handle_client(stream: &mut tokio::net::UnixStream, daemon: Daemon) -> R
                 task,
                 cwd,
                 started_at: _,
-            } => {
-                match daemon.register_run(run_id, agent, task, cwd).await {
-                    Ok(()) => DaemonResponse::Ok,
-                    Err(e) => DaemonResponse::Error {
-                        message: format!("register_run failed: {}", e),
-                    },
-                }
-            }
+            } => match daemon.register_run(run_id, agent, task, cwd).await {
+                Ok(()) => DaemonResponse::Ok,
+                Err(e) => DaemonResponse::Error {
+                    message: format!("register_run failed: {}", e),
+                },
+            },
             DaemonRequest::FinishRun {
                 run_id,
                 exit_code,

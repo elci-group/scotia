@@ -56,7 +56,11 @@ pub struct Notification {
 }
 
 impl Notification {
-    pub fn new(level: NotificationLevel, title: impl Into<String>, body: impl Into<String>) -> Self {
+    pub fn new(
+        level: NotificationLevel,
+        title: impl Into<String>,
+        body: impl Into<String>,
+    ) -> Self {
         Self {
             level,
             title: title.into(),
@@ -75,13 +79,42 @@ pub struct TerminalNotifier;
 
 impl Notifier for TerminalNotifier {
     fn notify(&self, n: Notification) -> anyhow::Result<()> {
-        eprintln!(
-            "{} [{}] {} — {}",
-            n.level.icon(),
-            n.level,
-            n.title,
-            n.body
-        );
+        eprintln!("{} [{}] {} — {}", n.level.icon(), n.level, n.title, n.body);
+        Ok(())
+    }
+}
+
+/// Test notifier that records all notifications for inspection.
+#[derive(Debug, Default)]
+pub struct TestNotifier {
+    pub notifications: std::sync::Mutex<Vec<Notification>>,
+}
+
+impl TestNotifier {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn len(&self) -> usize {
+        self.notifications.lock().unwrap().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn drain(&self) -> Vec<Notification> {
+        self.notifications.lock().unwrap().drain(..).collect()
+    }
+
+    pub fn contains(&self, predicate: impl Fn(&Notification) -> bool) -> bool {
+        self.notifications.lock().unwrap().iter().any(predicate)
+    }
+}
+
+impl Notifier for TestNotifier {
+    fn notify(&self, n: Notification) -> anyhow::Result<()> {
+        self.notifications.lock().unwrap().push(n);
         Ok(())
     }
 }
@@ -141,7 +174,10 @@ pub fn default_notifier() -> Arc<dyn Notifier> {
 
 /// Build a Nova Scotia themed notification for a run lifecycle event.
 pub fn run_started(agent: AgentKind, cwd: &Path, task: Option<&str>) -> Notification {
-    let harbour = cwd.file_name().and_then(|s| s.to_str()).unwrap_or("home port");
+    let harbour = cwd
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("home port");
     let body = if let Some(t) = task {
         format!("Agent {} casting off for task: {}", agent.as_str(), t)
     } else {

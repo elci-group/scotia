@@ -63,21 +63,21 @@ impl AgentInterceptor for OpencodeInterceptor {
         }
 
         // Structured side-channel JSON payloads (e.g. MCP messages).
-        if source == StreamSource::SideChannel && trimmed.starts_with('{') {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                if let Some(tool) = value.get("tool").and_then(|v| v.as_str()) {
-                    events.push(emit_action_invoked(
-                        ctx,
-                        tool,
-                        value
-                            .get("target")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string()),
-                        value.get("arguments").cloned(),
-                    ));
-                    return events;
-                }
-            }
+        if source == StreamSource::SideChannel
+            && trimmed.starts_with('{')
+            && let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed)
+            && let Some(tool) = value.get("tool").and_then(|v| v.as_str())
+        {
+            events.push(emit_action_invoked(
+                ctx,
+                tool,
+                value
+                    .get("target")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                value.get("arguments").cloned(),
+            ));
+            return events;
         }
 
         // Explicit retry markers: "[RETRY] [2] connection timed out".
@@ -222,10 +222,10 @@ impl AgentInterceptor for OpencodeInterceptor {
 
     fn finalize(&mut self, ctx: &InterceptorContext, exit_code: Option<i32>) -> Vec<ScotiaEvent> {
         let mut events = Vec::new();
-        if let Some((path, buf)) = self.diff_buffer.take() {
-            if !buf.is_empty() {
-                events.push(emit_state_delta(ctx, Some(path), Some(buf), None));
-            }
+        if let Some((path, buf)) = self.diff_buffer.take()
+            && !buf.is_empty()
+        {
+            events.push(emit_state_delta(ctx, Some(path), Some(buf), None));
         }
         events.push(ScotiaEvent::RunFinished {
             run_id: ctx.run_id,

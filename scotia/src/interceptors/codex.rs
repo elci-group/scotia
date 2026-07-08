@@ -81,29 +81,29 @@ impl AgentInterceptor for CodexInterceptor {
 
         // Structured JSON tool invocation:
         // {"tool":"file_read","target":"src/main.rs","arguments":{...}}
-        if trimmed.starts_with('{') && trimmed.ends_with('}') {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                if let Some(tool) = value.get("tool").and_then(|v| v.as_str()) {
-                    let target = value
-                        .get("target")
-                        .or_else(|| value.get("path"))
-                        .or_else(|| value.get("file_path"))
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                    let arguments = value.get("arguments").cloned();
+        if trimmed.starts_with('{')
+            && trimmed.ends_with('}')
+            && let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed)
+            && let Some(tool) = value.get("tool").and_then(|v| v.as_str())
+        {
+            let target = value
+                .get("target")
+                .or_else(|| value.get("path"))
+                .or_else(|| value.get("file_path"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let arguments = value.get("arguments").cloned();
 
-                    if tool.eq_ignore_ascii_case("edit")
-                        || tool.eq_ignore_ascii_case("write")
-                        || tool.eq_ignore_ascii_case("apply_patch")
-                    {
-                        let path = target.clone().unwrap_or_default();
-                        self.diff_buffer = Some((path, String::new()));
-                    }
-
-                    events.push(emit_action_invoked(ctx, tool, target, arguments));
-                    return events;
-                }
+            if tool.eq_ignore_ascii_case("edit")
+                || tool.eq_ignore_ascii_case("write")
+                || tool.eq_ignore_ascii_case("apply_patch")
+            {
+                let path = target.clone().unwrap_or_default();
+                self.diff_buffer = Some((path, String::new()));
             }
+
+            events.push(emit_action_invoked(ctx, tool, target, arguments));
+            return events;
         }
 
         // Plain-text action annotation: "bash: cargo test" or "▸ read: src/main.rs".

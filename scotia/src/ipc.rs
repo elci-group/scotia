@@ -90,3 +90,54 @@ impl RunSummary {
         end.signed_duration_since(self.started_at)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::event::AgentKind;
+
+    #[test]
+    fn request_serializes_with_method_tag() {
+        let req = DaemonRequest::Ping;
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"method\":\"ping\""));
+    }
+
+    #[test]
+    fn run_summary_active_when_not_finished() {
+        let summary = RunSummary {
+            run_id: uuid::Uuid::new_v4(),
+            agent: AgentKind::KimiCode,
+            task: None,
+            cwd: PathBuf::from("."),
+            started_at: Utc::now(),
+            finished_at: None,
+            exit_code: None,
+            actions: 0,
+            models: 0,
+            errors: 0,
+            retries: 0,
+        };
+        assert!(summary.is_active());
+    }
+
+    #[test]
+    fn run_summary_duration_non_negative() {
+        let now = Utc::now();
+        let summary = RunSummary {
+            run_id: uuid::Uuid::new_v4(),
+            agent: AgentKind::ClaudeCode,
+            task: None,
+            cwd: PathBuf::from("."),
+            started_at: now,
+            finished_at: Some(now + chrono::Duration::seconds(10)),
+            exit_code: Some(0),
+            actions: 1,
+            models: 0,
+            errors: 0,
+            retries: 0,
+        };
+        let duration = summary.duration();
+        assert!(duration.num_seconds() >= 10);
+    }
+}

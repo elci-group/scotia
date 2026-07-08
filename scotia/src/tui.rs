@@ -1,15 +1,17 @@
 use crate::event::AgentKind;
-use crate::storage::{store_run, StorageConfig};
-use crate::wrapper::{run_and_capture, WrapperConfig};
+use crate::storage::{StorageConfig, store_run};
+use crate::wrapper::{WrapperConfig, run_and_capture};
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+};
+use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
-use ratatui::Terminal;
 use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 
@@ -41,9 +43,21 @@ pub fn detect_harnesses() -> Vec<Harness> {
 /// Detect harnesses using a provided PATH-style string (testable entry point).
 pub fn detect_harnesses_with_path(path: &std::ffi::OsStr) -> Vec<Harness> {
     let candidates = vec![
-        ("claude-code", AgentKind::ClaudeCode, vec!["claude", "claude-code", "claude_code"]),
-        ("kimi-code", AgentKind::KimiCode, vec!["kimi", "kimi-code", "kimi_code"]),
-        ("codex", AgentKind::Codex, vec!["codex", "codex-cli", "codex_cli"]),
+        (
+            "claude-code",
+            AgentKind::ClaudeCode,
+            vec!["claude", "claude-code", "claude_code"],
+        ),
+        (
+            "kimi-code",
+            AgentKind::KimiCode,
+            vec!["kimi", "kimi-code", "kimi_code"],
+        ),
+        (
+            "codex",
+            AgentKind::Codex,
+            vec!["codex", "codex-cli", "codex_cli"],
+        ),
         ("agy", AgentKind::Agy, vec!["agy"]),
         ("cosine", AgentKind::Cosine, vec!["cosine"]),
         ("opencode", AgentKind::Opencode, vec!["opencode"]),
@@ -272,7 +286,11 @@ async fn run_harness(
         let paragraph = Paragraph::new(format!(
             "Starting {}\nTask: {}\n\nPress Ctrl+C in the agent to abort.",
             harness.display_name,
-            if app.task.is_empty() { "(none)" } else { &app.task }
+            if app.task.is_empty() {
+                "(none)"
+            } else {
+                &app.task
+            }
         ))
         .block(block);
         f.render_widget(Clear, area);
@@ -339,7 +357,11 @@ fn ui(f: &mut ratatui::Frame, app: &App) {
         .split(f.area());
 
     let title = Paragraph::new("Scotia — Select an agent harness to observe")
-        .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        .style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
         .block(Block::default().borders(Borders::BOTTOM));
     f.render_widget(title, chunks[0]);
 

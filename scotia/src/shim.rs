@@ -32,7 +32,11 @@ pub struct InstallResult {
 }
 
 /// Install shims by symlinking agent names to the scotia-shim binary.
-pub fn install_shims(shim_dir: &Path, scotia_shim: &Path, agents: &[&str]) -> Result<InstallResult> {
+pub fn install_shims(
+    shim_dir: &Path,
+    scotia_shim: &Path,
+    agents: &[&str],
+) -> Result<InstallResult> {
     fs::create_dir_all(shim_dir)
         .with_context(|| format!("failed to create shim directory {}", shim_dir.display()))?;
 
@@ -51,8 +55,11 @@ pub fn install_shims(shim_dir: &Path, scotia_shim: &Path, agents: &[&str]) -> Re
         // Detect if a real binary with this name appears earlier in PATH.
         if let Some(existing) = find_in_path(name, &path_entries) {
             let existing_canon = fs::canonicalize(&existing).unwrap_or(existing.clone());
-            if existing_canon != shim_dir_canon && existing_canon.parent() != Some(&shim_dir_canon) {
-                result.collisions.push(format!("{} -> {}", name, existing.display()));
+            if existing_canon != shim_dir_canon && existing_canon.parent() != Some(&shim_dir_canon)
+            {
+                result
+                    .collisions
+                    .push(format!("{} -> {}", name, existing.display()));
             }
         }
 
@@ -69,12 +76,12 @@ pub fn uninstall_shims(shim_dir: &Path, agents: &[&str]) -> Result<Vec<String>> 
     let mut removed = Vec::new();
     for name in agents {
         let link_path = shim_dir.join(name);
-        if let Ok(meta) = link_path.symlink_metadata() {
-            if meta.file_type().is_symlink() {
-                fs::remove_file(&link_path)
-                    .with_context(|| format!("failed to remove shim {}", link_path.display()))?;
-                removed.push((*name).to_string());
-            }
+        if let Ok(meta) = link_path.symlink_metadata()
+            && meta.file_type().is_symlink()
+        {
+            fs::remove_file(&link_path)
+                .with_context(|| format!("failed to remove shim {}", link_path.display()))?;
+            removed.push((*name).to_string());
         }
     }
     Ok(removed)
@@ -109,8 +116,7 @@ pub fn remove_shell_path(shim_dir: &Path) -> Result<Vec<PathBuf>> {
             continue;
         }
         let cleaned = contents.replace(&block, "");
-        fs::write(&rc, cleaned)
-            .with_context(|| format!("failed to update {}", rc.display()))?;
+        fs::write(&rc, cleaned).with_context(|| format!("failed to update {}", rc.display()))?;
         updated.push(rc);
     }
 

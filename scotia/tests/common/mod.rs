@@ -1,14 +1,12 @@
 #![allow(dead_code)]
 
 use chrono::Utc;
-use scotia::event::{
-    ActionStatus, AgentKind, ErrorKind, Role, ScotiaEvent, ScotiaRun,
-};
+use scotia::event::{ActionStatus, AgentKind, ErrorKind, Role, ScotiaEvent, ScotiaRun};
 use uuid::Uuid;
 
 /// Create a minimal run with a RunStarted event already present.
 pub fn empty_run(agent: AgentKind) -> ScotiaRun {
-    ScotiaRun::new(agent, Some("stress test".to_string()))
+    ScotiaRun::new(agent, Some("stress test".to_string()), None)
 }
 
 /// Add an action invocation to a run.

@@ -105,7 +105,7 @@ fn try_parse_state_delta(ctx: &InterceptorContext, line: &str) -> Option<ScotiaE
 
     // Unified diff header: "--- a/src/main.rs" / "+++ b/src/main.rs"
     if line.starts_with("--- ") || line.starts_with("+++ ") {
-        let path = line[4..].trim().split_whitespace().next().map(|s| {
+        let path = line[4..].split_whitespace().next().map(|s| {
             s.strip_prefix("a/")
                 .or_else(|| s.strip_prefix("b/"))
                 .unwrap_or(s)

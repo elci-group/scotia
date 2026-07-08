@@ -20,10 +20,7 @@ fn agent_kind_for_name(name: &str) -> Option<&'static str> {
 
 /// Find the directory this shim binary lives in.
 fn shim_dir() -> Option<PathBuf> {
-    env::current_exe()
-        .ok()?
-        .parent()
-        .map(Path::to_path_buf)
+    env::current_exe().ok()?.parent().map(Path::to_path_buf)
 }
 
 /// Locate the real `scotia` binary next to this shim, or fall back to PATH.
@@ -56,7 +53,7 @@ fn main() {
     let args: Vec<OsString> = env::args_os().collect();
     let invoked_as = args
         .first()
-        .map(|s| std::path::Path::new(s))
+        .map(std::path::Path::new)
         .and_then(|p| p.file_stem())
         .and_then(|s| s.to_str())
         .unwrap_or("scotia-shim");

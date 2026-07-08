@@ -7,7 +7,7 @@ use uuid::Uuid;
 /// The algebra treats a run as a partially ordered set of state transitions.
 /// It provides operations to validate, graph, diff, and derive assertions from
 /// runs without relying on full transcripts.
-
+///
 /// A validation issue found in a run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationIssue {
@@ -15,13 +15,8 @@ pub enum ValidationIssue {
     MissingRunFinished,
     MultipleRunStarted,
     MultipleRunFinished,
-    UnmatchedActionInvoked {
-        event_id: Uuid,
-        tool: String,
-    },
-    OrphanedActionResult {
-        event_id: Uuid,
-    },
+    UnmatchedActionInvoked { event_id: Uuid, tool: String },
+    OrphanedActionResult { event_id: Uuid },
     RunFinishedBeforeStarted,
 }
 
@@ -53,10 +48,10 @@ pub fn validate(run: &ScotiaRun) -> Vec<ValidationIssue> {
         issues.push(ValidationIssue::MultipleRunFinished);
     }
 
-    if let (Some(s), Some(f)) = (started.first(), finished.first()) {
-        if f.timestamp() < s.timestamp() {
-            issues.push(ValidationIssue::RunFinishedBeforeStarted);
-        }
+    if let (Some(s), Some(f)) = (started.first(), finished.first())
+        && f.timestamp() < s.timestamp()
+    {
+        issues.push(ValidationIssue::RunFinishedBeforeStarted);
     }
 
     // Match action invoked -> result using a simple stack per tool.
@@ -148,7 +143,9 @@ pub fn action_graph(run: &ScotiaRun) -> Vec<ActionNode> {
                     });
                 }
             }
-            ScotiaEvent::StateDelta { path, description, .. } => {
+            ScotiaEvent::StateDelta {
+                path, description, ..
+            } => {
                 if let Some((idx, _)) = open.last() {
                     nodes[*idx].state_deltas.push(StateDeltaNode {
                         path: path.clone(),

@@ -10,8 +10,8 @@ use common::*;
 use proptest::collection::vec as pvec;
 use proptest::prelude::*;
 use scotia::algebra::{
-    action_graph, diff_runs, regression_suite, render_regression_suite, validate, Assertion,
-    ValidationIssue,
+    Assertion, ValidationIssue, action_graph, diff_runs, regression_suite, render_regression_suite,
+    validate,
 };
 use scotia::event::{ActionStatus, AgentKind, ErrorKind, ScotiaEvent, ScotiaRun};
 use std::collections::HashMap;
@@ -130,7 +130,7 @@ fn validate_empty_run_reports_missing_finished() {
 
 #[test]
 fn validate_duplicate_start_and_finish_events() {
-    let mut run = ScotiaRun::new(AgentKind::KimiCode, Some("dup".to_string()));
+    let mut run = ScotiaRun::new(AgentKind::KimiCode, Some("dup".to_string()), None);
     run.push(ScotiaEvent::RunStarted {
         run_id: run.run_id,
         agent: run.agent,
@@ -148,7 +148,7 @@ fn validate_duplicate_start_and_finish_events() {
 
 #[test]
 fn validate_finished_before_started() {
-    let mut run = ScotiaRun::new(AgentKind::Codex, Some("time travel".to_string()));
+    let mut run = ScotiaRun::new(AgentKind::Codex, Some("time travel".to_string()), None);
     let run_id = run.run_id;
     let base = Utc::now();
     run.events.clear();
@@ -190,9 +190,11 @@ fn validate_orphaned_result_and_unmatched_invocation() {
     finish(&mut run, 0);
 
     let issues = validate(&run);
-    assert!(issues
-        .iter()
-        .any(|i| matches!(i, ValidationIssue::OrphanedActionResult { .. })));
+    assert!(
+        issues
+            .iter()
+            .any(|i| matches!(i, ValidationIssue::OrphanedActionResult { .. }))
+    );
     assert!(issues.iter().any(|i| matches!(
         i,
         ValidationIssue::UnmatchedActionInvoked { tool, .. }
@@ -256,7 +258,11 @@ fn validate_large_balanced_run_stays_valid() {
     finish(&mut run, 0);
 
     let issues = validate(&run);
-    assert!(issues.is_empty(), "large balanced run should be valid: {:?}", issues);
+    assert!(
+        issues.is_empty(),
+        "large balanced run should be valid: {:?}",
+        issues
+    );
     assert_eq!(action_graph(&run).len(), 1_000);
 }
 

@@ -64,12 +64,12 @@ impl<T: AgentAdapter + ?Sized> AgentAdapter for Box<T> {
 pub fn build_adapter(agent: AgentKind) -> Box<dyn AgentAdapter> {
     match agent {
         AgentKind::ClaudeCode => Box::new(crate::adapters::claude::ClaudeAdapter::default()),
-        AgentKind::Codex => Box::new(crate::adapters::codex::CodexAdapter::default()),
-        AgentKind::KimiCode => Box::new(crate::adapters::kimi::KimiAdapter::default()),
-        AgentKind::Agy => Box::new(crate::adapters::agy::AgyAdapter::default()),
-        AgentKind::Cosine => Box::new(crate::adapters::cosine::CosineAdapter::default()),
-        AgentKind::Opencode => Box::new(crate::adapters::opencode::OpencodeAdapter::default()),
-        AgentKind::Unknown => Box::new(crate::adapters::generic::GenericAdapter::default()),
+        AgentKind::Codex => Box::new(crate::adapters::codex::CodexAdapter),
+        AgentKind::KimiCode => Box::new(crate::adapters::kimi::KimiAdapter),
+        AgentKind::Agy => Box::new(crate::adapters::agy::AgyAdapter),
+        AgentKind::Cosine => Box::new(crate::adapters::cosine::CosineAdapter),
+        AgentKind::Opencode => Box::new(crate::adapters::opencode::OpencodeAdapter),
+        AgentKind::Unknown => Box::new(crate::adapters::generic::GenericAdapter),
     }
 }
 

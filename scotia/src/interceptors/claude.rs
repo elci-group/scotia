@@ -125,10 +125,10 @@ impl AgentInterceptor for ClaudeInterceptor {
 
     fn finalize(&mut self, ctx: &InterceptorContext, exit_code: Option<i32>) -> Vec<ScotiaEvent> {
         let mut events = Vec::new();
-        if let Some((path, buf)) = self.diff_buffer.take() {
-            if buf.len() > 40 {
-                events.push(emit_state_delta(ctx, Some(path), Some(buf), None));
-            }
+        if let Some((path, buf)) = self.diff_buffer.take()
+            && buf.len() > 40
+        {
+            events.push(emit_state_delta(ctx, Some(path), Some(buf), None));
         }
         events.push(ScotiaEvent::RunFinished {
             run_id: ctx.run_id,

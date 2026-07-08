@@ -2,11 +2,9 @@ mod common;
 
 use chrono::{DateTime, Duration, Utc};
 use proptest::prelude::*;
-use scotia::event::{
-    ActionStatus, AgentKind, ErrorKind, Role, ScotiaEvent, ScotiaRun,
-};
+use scotia::event::{ActionStatus, AgentKind, ErrorKind, Role, ScotiaEvent, ScotiaRun};
 use scotia::normalizer::normalize;
-use scotia::storage::{load_run, StorageConfig, store_run};
+use scotia::storage::{StorageConfig, load_run, store_run};
 use serde_json::json;
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -95,19 +93,15 @@ fn simple_event_strategy() -> impl Strategy<Value = SimpleEvent> {
     let text = r#"[a-zA-Z0-9_ \t\n]{0,40}"#;
     let short = r#"[a-z][a-z0-9_]{1,15}"#;
     prop_oneof![
-        (timestamp_strategy(), text, proptest::option::of(short))
-            .prop_map(|(ts, content, finish_reason)| SimpleEvent::Chunk {
+        (timestamp_strategy(), text, proptest::option::of(short)).prop_map(
+            |(ts, content, finish_reason)| SimpleEvent::Chunk {
                 ts,
                 content,
                 finish_reason,
-            }),
-        (timestamp_strategy(), short, proptest::option::of(short)).prop_map(
-            |(ts, tool, target)| SimpleEvent::Action {
-                ts,
-                tool,
-                target,
             }
         ),
+        (timestamp_strategy(), short, proptest::option::of(short))
+            .prop_map(|(ts, tool, target)| SimpleEvent::Action { ts, tool, target }),
         (
             timestamp_strategy(),
             proptest::option::of(action_status_strategy()),
@@ -123,20 +117,10 @@ fn simple_event_strategy() -> impl Strategy<Value = SimpleEvent> {
             stage,
             model,
         }),
-        (timestamp_strategy(), error_kind_strategy(), text).prop_map(|(ts, kind, message)| {
-            SimpleEvent::Error {
-                ts,
-                kind,
-                message,
-            }
-        }),
-        (timestamp_strategy(), role_strategy(), text).prop_map(|(ts, role, content)| {
-            SimpleEvent::Prompt {
-                ts,
-                role,
-                content,
-            }
-        }),
+        (timestamp_strategy(), error_kind_strategy(), text)
+            .prop_map(|(ts, kind, message)| { SimpleEvent::Error { ts, kind, message } }),
+        (timestamp_strategy(), role_strategy(), text)
+            .prop_map(|(ts, role, content)| { SimpleEvent::Prompt { ts, role, content } }),
         (
             timestamp_strategy(),
             proptest::option::of(r#"[a-z/_.]{1,30}"#),
@@ -160,19 +144,15 @@ fn simple_event_strategy_no_markers() -> impl Strategy<Value = SimpleEvent> {
     let text = r#"[a-zA-Z0-9_ \t\n]{0,40}"#;
     let short = r#"[a-z][a-z0-9_]{1,15}"#;
     prop_oneof![
-        (timestamp_strategy(), text, proptest::option::of(short))
-            .prop_map(|(ts, content, finish_reason)| SimpleEvent::Chunk {
+        (timestamp_strategy(), text, proptest::option::of(short)).prop_map(
+            |(ts, content, finish_reason)| SimpleEvent::Chunk {
                 ts,
                 content,
                 finish_reason,
-            }),
-        (timestamp_strategy(), short, proptest::option::of(short)).prop_map(
-            |(ts, tool, target)| SimpleEvent::Action {
-                ts,
-                tool,
-                target,
             }
         ),
+        (timestamp_strategy(), short, proptest::option::of(short))
+            .prop_map(|(ts, tool, target)| SimpleEvent::Action { ts, tool, target }),
         (
             timestamp_strategy(),
             proptest::option::of(action_status_strategy()),
@@ -188,20 +168,10 @@ fn simple_event_strategy_no_markers() -> impl Strategy<Value = SimpleEvent> {
             stage,
             model,
         }),
-        (timestamp_strategy(), error_kind_strategy(), text).prop_map(|(ts, kind, message)| {
-            SimpleEvent::Error {
-                ts,
-                kind,
-                message,
-            }
-        }),
-        (timestamp_strategy(), role_strategy(), text).prop_map(|(ts, role, content)| {
-            SimpleEvent::Prompt {
-                ts,
-                role,
-                content,
-            }
-        }),
+        (timestamp_strategy(), error_kind_strategy(), text)
+            .prop_map(|(ts, kind, message)| { SimpleEvent::Error { ts, kind, message } }),
+        (timestamp_strategy(), role_strategy(), text)
+            .prop_map(|(ts, role, content)| { SimpleEvent::Prompt { ts, role, content } }),
         (
             timestamp_strategy(),
             proptest::option::of(r#"[a-z/_.]{1,30}"#),
@@ -219,7 +189,7 @@ fn simple_event_strategy_no_markers() -> impl Strategy<Value = SimpleEvent> {
 /// generated events intentionally override the default `RunStarted` so that
 /// duplicate start/finish markers can be exercised.
 fn materialize(agent: AgentKind, spec: Vec<SimpleEvent>) -> ScotiaRun {
-    let mut run = ScotiaRun::new(agent, Some("proptest".to_string()));
+    let mut run = ScotiaRun::new(agent, Some("proptest".to_string()), None);
     let run_id = run.run_id;
     run.events = spec
         .into_iter()
@@ -317,23 +287,24 @@ fn materialize(agent: AgentKind, spec: Vec<SimpleEvent>) -> ScotiaRun {
 
 #[test]
 fn normalize_preserves_run_identity() {
-    let run = ScotiaRun::new(AgentKind::ClaudeCode, Some("identity".to_string()));
+    let run = ScotiaRun::new(AgentKind::ClaudeCode, Some("identity".to_string()), None);
     let norm = normalize(run.clone());
 
     assert_eq!(norm.run_id, run.run_id);
     assert_eq!(norm.agent, run.agent);
     assert_eq!(norm.task, run.task);
     assert_eq!(norm.started_at, run.started_at);
-    assert!(norm
-        .events
-        .iter()
-        .any(|e| matches!(e, ScotiaEvent::RunStarted { .. })));
+    assert!(
+        norm.events
+            .iter()
+            .any(|e| matches!(e, ScotiaEvent::RunStarted { .. }))
+    );
 }
 
 #[test]
 fn normalize_sorts_out_of_order_timestamps() {
     let base = Utc::now();
-    let mut run = ScotiaRun::new(AgentKind::KimiCode, Some("sort".to_string()));
+    let mut run = ScotiaRun::new(AgentKind::KimiCode, Some("sort".to_string()), None);
     let run_id = run.run_id;
 
     run.events = vec![
@@ -383,7 +354,7 @@ fn normalize_sorts_out_of_order_timestamps() {
 #[test]
 fn normalize_coalesces_adjacent_chunks_and_separates_around_actions() {
     let base = Utc::now();
-    let mut run = ScotiaRun::new(AgentKind::Codex, Some("coalesce".to_string()));
+    let mut run = ScotiaRun::new(AgentKind::Codex, Some("coalesce".to_string()), None);
     let run_id = run.run_id;
 
     run.events = vec![
@@ -445,13 +416,21 @@ fn normalize_coalesces_adjacent_chunks_and_separates_around_actions() {
         .filter(|e| matches!(e, ScotiaEvent::ResponseChunk { .. }))
         .collect();
 
-    assert_eq!(chunks.len(), 2, "adjacent chunks should coalesce; chunks around an action should stay separate");
+    assert_eq!(
+        chunks.len(),
+        2,
+        "adjacent chunks should coalesce; chunks around an action should stay separate"
+    );
     let first = match chunks[0] {
         ScotiaEvent::ResponseChunk { content, .. } => content,
         _ => unreachable!(),
     };
     let second = match chunks[1] {
-        ScotiaEvent::ResponseChunk { content, finish_reason, .. } => (content, finish_reason),
+        ScotiaEvent::ResponseChunk {
+            content,
+            finish_reason,
+            ..
+        } => (content, finish_reason),
         _ => unreachable!(),
     };
     assert_eq!(first, "alpha\nbeta");
@@ -462,7 +441,7 @@ fn normalize_coalesces_adjacent_chunks_and_separates_around_actions() {
 #[test]
 fn normalize_keeps_first_started_and_last_finished() {
     let base = Utc::now();
-    let mut run = ScotiaRun::new(AgentKind::Agy, Some("duplicates".to_string()));
+    let mut run = ScotiaRun::new(AgentKind::Agy, Some("duplicates".to_string()), None);
     let run_id = run.run_id;
 
     run.events = vec![
@@ -516,13 +495,22 @@ fn normalize_keeps_first_started_and_last_finished() {
     assert_eq!(starts.len(), 1);
     assert_eq!(finishes.len(), 1);
 
-    let ScotiaEvent::RunStarted { task, timestamp, .. } = starts[0] else {
+    let ScotiaEvent::RunStarted {
+        task, timestamp, ..
+    } = starts[0]
+    else {
         unreachable!()
     };
     assert_eq!(task.as_deref(), Some("first"));
     assert_eq!(*timestamp, base);
 
-    let ScotiaEvent::RunFinished { exit_code, summary, timestamp, .. } = finishes[0] else {
+    let ScotiaEvent::RunFinished {
+        exit_code,
+        summary,
+        timestamp,
+        ..
+    } = finishes[0]
+    else {
         unreachable!()
     };
     assert_eq!(*exit_code, Some(1));
@@ -602,7 +590,10 @@ fn normalize_handles_large_run_within_limits() {
         .iter()
         .filter(|e| matches!(e, ScotiaEvent::ResponseChunk { .. }))
         .count();
-    assert_eq!(chunk_count, 1, "5 000 adjacent chunks should collapse to one");
+    assert_eq!(
+        chunk_count, 1,
+        "5 000 adjacent chunks should collapse to one"
+    );
 
     let actions = norm.metadata.get("action_count").and_then(|v| v.as_u64());
     assert_eq!(actions, Some(1));
@@ -610,7 +601,11 @@ fn normalize_handles_large_run_within_limits() {
     let errors = norm.metadata.get("error_count").and_then(|v| v.as_u64());
     assert_eq!(errors, Some(1));
 
-    let routes = norm.metadata.get("model_routes").cloned().unwrap_or_default();
+    let routes = norm
+        .metadata
+        .get("model_routes")
+        .cloned()
+        .unwrap_or_default();
     assert!(routes.to_string().contains("planner"));
     assert!(routes.to_string().contains("groq"));
 }
@@ -713,15 +708,8 @@ fn init_git_repo(path: &std::path::Path) -> git2::Repository {
         index.write().expect("persist index");
         let tree_id = index.write_tree().expect("write tree");
         let tree = repo.find_tree(tree_id).expect("find tree");
-        repo.commit(
-            Some("HEAD"),
-            &sig,
-            &sig,
-            "initial commit",
-            &tree,
-            &[],
-        )
-        .expect("initial commit");
+        repo.commit(Some("HEAD"), &sig, &sig, "initial commit", &tree, &[])
+            .expect("initial commit");
     }
     repo
 }
@@ -731,7 +719,11 @@ async fn git_commit_round_trips_in_temp_repo() {
     let temp = TempDir::new().unwrap();
     let repo = init_git_repo(temp.path());
 
-    let mut run = ScotiaRun::new(AgentKind::ClaudeCode, Some("git round trip".to_string()));
+    let mut run = ScotiaRun::new(
+        AgentKind::ClaudeCode,
+        Some("git round trip".to_string()),
+        None,
+    );
     common::response_chunk(&mut run, &common::big_text(100));
     let normalized = normalize(run.clone());
 
@@ -761,7 +753,10 @@ async fn git_commit_round_trips_in_temp_repo() {
         .expect("hard reset to head");
 
     let statuses = repo.statuses(None).expect("statuses");
-    assert!(statuses.is_empty(), "worktree/index should be clean after commit");
+    assert!(
+        statuses.is_empty(),
+        "worktree/index should be clean after commit"
+    );
 
     let message = head.message().expect("commit message");
     assert!(

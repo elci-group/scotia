@@ -12,14 +12,12 @@ pub struct Synthesis {
 
 /// Generate a post-hoc synthesis from a normalized run.
 pub fn synthesize(run: &ScotiaRun) -> Synthesis {
-    let mut synthesis = Synthesis::default();
-
-    synthesis.summary = generate_summary(run);
-    synthesis.decision_rationales = generate_rationales(run);
-    synthesis.trade_offs = generate_trade_offs(run);
-    synthesis.action_graph_dot = generate_action_graph(run);
-
-    synthesis
+    Synthesis {
+        summary: generate_summary(run),
+        decision_rationales: generate_rationales(run),
+        trade_offs: generate_trade_offs(run),
+        action_graph_dot: generate_action_graph(run),
+    }
 }
 
 fn generate_summary(run: &ScotiaRun) -> String {
@@ -80,13 +78,13 @@ fn generate_rationales(run: &ScotiaRun) -> Vec<String> {
             ScotiaEvent::ActionInvoked { tool, target, .. }
                 if tool == "edit" || tool == "write" || tool == "code_edit" =>
             {
-                if let Some(read_target) = &last_read {
-                    if target.as_deref() == Some(read_target) {
-                        rationales.push(format!(
+                if let Some(read_target) = &last_read
+                    && target.as_deref() == Some(read_target)
+                {
+                    rationales.push(format!(
                             "The agent likely edited {} because it had just read the same file and identified a needed change.",
                             read_target
                         ));
-                    }
                 }
             }
             _ => {}

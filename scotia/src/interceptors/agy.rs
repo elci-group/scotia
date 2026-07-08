@@ -55,32 +55,32 @@ impl AgentInterceptor for AgyInterceptor {
 
         // Structured JSON tool invocation:
         // {"tool":"file_read","target":"src/main.rs","arguments":{...}}
-        if trimmed.starts_with('{') && trimmed.ends_with('}') {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                if let Some(tool) = value.get("tool").and_then(|v| v.as_str()) {
-                    let target = value
-                        .get("target")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                    let arguments = value.get("arguments").cloned();
+        if trimmed.starts_with('{')
+            && trimmed.ends_with('}')
+            && let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed)
+            && let Some(tool) = value.get("tool").and_then(|v| v.as_str())
+        {
+            let target = value
+                .get("target")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let arguments = value.get("arguments").cloned();
 
-                    if tool.eq_ignore_ascii_case("edit")
-                        || tool.eq_ignore_ascii_case("write")
-                        || tool.eq_ignore_ascii_case("apply_patch")
-                    {
-                        let path = value
-                            .get("path")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string())
-                            .or_else(|| target.clone())
-                            .unwrap_or_default();
-                        self.diff_buffer = Some((path, String::new()));
-                    }
-
-                    events.push(emit_action_invoked(ctx, tool, target, arguments));
-                    return events;
-                }
+            if tool.eq_ignore_ascii_case("edit")
+                || tool.eq_ignore_ascii_case("write")
+                || tool.eq_ignore_ascii_case("apply_patch")
+            {
+                let path = value
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .or_else(|| target.clone())
+                    .unwrap_or_default();
+                self.diff_buffer = Some((path, String::new()));
             }
+
+            events.push(emit_action_invoked(ctx, tool, target, arguments));
+            return events;
         }
 
         // Plain-text action annotation: "tool: bash cargo test" or "action: grep".
@@ -128,18 +128,17 @@ impl AgentInterceptor for AgyInterceptor {
         }
 
         // Accumulate unified-diff blocks after an edit/write.
-        if let Some((_path, buf)) = self.diff_buffer.as_mut() {
-            if line.starts_with("---")
+        if let Some((_path, buf)) = self.diff_buffer.as_mut()
+            && (line.starts_with("---")
                 || line.starts_with("+++")
                 || line.starts_with("@@")
                 || line.starts_with('+')
                 || line.starts_with('-')
-                || line.starts_with(' ')
-            {
-                buf.push_str(line);
-                buf.push('\n');
-                return events;
-            }
+                || line.starts_with(' '))
+        {
+            buf.push_str(line);
+            buf.push('\n');
+            return events;
         }
 
         // Anything else is a response chunk.

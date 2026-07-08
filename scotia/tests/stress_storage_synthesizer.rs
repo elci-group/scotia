@@ -48,12 +48,16 @@ async fn empty_run_roundtrip() {
     let run = empty_run(AgentKind::ClaudeCode);
     let run_id = run.run_id;
 
-    let stored = store_run(&config, run).await.expect("store_run should succeed");
+    let stored = store_run(&config, run)
+        .await
+        .expect("store_run should succeed");
     assert!(stored.json_path.exists());
     assert!(stored.summary_path.exists());
     assert!(stored.dot_path.exists());
 
-    let loaded = load_run(&stored.json_path).await.expect("load_run should succeed");
+    let loaded = load_run(&stored.json_path)
+        .await
+        .expect("load_run should succeed");
     assert_eq!(loaded.run_id, run_id);
     assert_eq!(loaded.agent, AgentKind::ClaudeCode);
     assert!(!loaded.events.is_empty());
@@ -71,8 +75,12 @@ async fn many_events_roundtrip() {
     let event_count = run.events.len();
     let run_id = run.run_id;
 
-    let stored = store_run(&config, run).await.expect("store_run should succeed");
-    let loaded = load_run(&stored.json_path).await.expect("load_run should succeed");
+    let stored = store_run(&config, run)
+        .await
+        .expect("store_run should succeed");
+    let loaded = load_run(&stored.json_path)
+        .await
+        .expect("load_run should succeed");
 
     assert_eq!(loaded.run_id, run_id);
     assert_eq!(loaded.events.len(), event_count);
@@ -101,8 +109,12 @@ async fn large_response_chunk_roundtrip() {
     let words = 10_000;
     let run = run_with_response_chunk(words);
 
-    let stored = store_run(&config, run).await.expect("store_run should succeed");
-    let loaded = load_run(&stored.json_path).await.expect("load_run should succeed");
+    let stored = store_run(&config, run)
+        .await
+        .expect("store_run should succeed");
+    let loaded = load_run(&stored.json_path)
+        .await
+        .expect("load_run should succeed");
 
     let chunks: Vec<_> = loaded
         .events
@@ -130,7 +142,9 @@ async fn concurrent_writes_different_runs() {
     for (i, cfg) in configs.into_iter().enumerate() {
         let run = run_with_action_pairs(AgentKind::ClaudeCode, i * 100);
         handles.push(tokio::spawn(async move {
-            store_run(&cfg, run).await.expect("concurrent store should succeed")
+            store_run(&cfg, run)
+                .await
+                .expect("concurrent store should succeed")
         }));
     }
 
@@ -140,7 +154,11 @@ async fn concurrent_writes_different_runs() {
     }
 
     let ids: HashSet<_> = stored.iter().map(|s| s.run_id).collect();
-    assert_eq!(ids.len(), stored.len(), "each stored run must have a unique id");
+    assert_eq!(
+        ids.len(),
+        stored.len(),
+        "each stored run must have a unique id"
+    );
 
     for s in &stored {
         assert!(s.json_path.exists());
@@ -164,7 +182,9 @@ async fn list_runs_sorted() {
         stored_ids.push(stored.run_id);
     }
 
-    let paths = list_runs(&config.root).await.expect("list_runs should succeed");
+    let paths = list_runs(&config.root)
+        .await
+        .expect("list_runs should succeed");
     assert_eq!(paths.len(), stored_ids.len());
 
     let mut sorted = paths.clone();
@@ -178,7 +198,11 @@ fn synthesize_empty_run() {
     let synthesis = synthesize(&run);
 
     assert!(synthesis.summary.contains(run.agent.as_str()));
-    assert!(synthesis.summary.contains(run.task.as_deref().unwrap_or("")));
+    assert!(
+        synthesis
+            .summary
+            .contains(run.task.as_deref().unwrap_or(""))
+    );
     assert!(synthesis.summary.contains(&run.run_id.to_string()));
     assert!(synthesis.decision_rationales.is_empty());
     assert!(synthesis.trade_offs.is_empty());
@@ -211,10 +235,12 @@ fn synthesize_mixed_models_tradeoff() {
     finish(&mut run, 0);
 
     let synthesis = synthesize(&run);
-    assert!(synthesis
-        .trade_offs
-        .iter()
-        .any(|t| t.contains("local and remote")));
+    assert!(
+        synthesis
+            .trade_offs
+            .iter()
+            .any(|t| t.contains("local and remote"))
+    );
 }
 
 #[test]
@@ -226,10 +252,12 @@ fn synthesize_repeated_tool_tradeoff() {
     finish(&mut run, 0);
 
     let synthesis = synthesize(&run);
-    assert!(synthesis
-        .trade_offs
-        .iter()
-        .any(|t| t.contains("bash") && t.contains("iterative exploration")));
+    assert!(
+        synthesis
+            .trade_offs
+            .iter()
+            .any(|t| t.contains("bash") && t.contains("iterative exploration"))
+    );
 }
 
 proptest! {

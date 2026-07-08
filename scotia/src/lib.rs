@@ -11,6 +11,7 @@ pub mod ipc;
 pub mod ipc_transport;
 pub mod normalizer;
 pub mod notify;
+pub mod service;
 pub mod shim;
 pub mod storage;
 pub mod synthesizer;

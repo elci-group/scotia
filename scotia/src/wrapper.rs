@@ -1,7 +1,5 @@
 use crate::event::{AgentKind, ScotiaEvent, ScotiaRun};
-use crate::interceptor::{
-    build_interceptor, AgentInterceptor, InterceptorContext, StreamSource,
-};
+use crate::interceptor::{AgentInterceptor, InterceptorContext, StreamSource, build_interceptor};
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -45,7 +43,8 @@ pub async fn run_and_capture(config: WrapperConfig) -> Result<ScotiaRun> {
         cmd.current_dir(dir);
         // Hint the working directory to the interceptor for side-channel log discovery.
         let mut ctx = ctx.clone();
-        ctx.hints.insert("cwd".to_string(), dir.display().to_string());
+        ctx.hints
+            .insert("cwd".to_string(), dir.display().to_string());
     }
 
     let mut child = cmd.spawn().with_context(|| {
@@ -103,7 +102,10 @@ pub async fn run_and_capture(config: WrapperConfig) -> Result<ScotiaRun> {
 
     // Ensure the run always starts with RunStarted; the captured stream may not
     // include it because the wrapper synthesizes it when creating ScotiaRun.
-    if !all_events.iter().any(|e| matches!(e, ScotiaEvent::RunStarted { .. })) {
+    if !all_events
+        .iter()
+        .any(|e| matches!(e, ScotiaEvent::RunStarted { .. }))
+    {
         all_events.insert(
             0,
             ScotiaEvent::RunStarted {
