@@ -1,6 +1,7 @@
 use crate::algebra::{diff_runs, regression_suite, render_regression_suite, validate};
 use crate::event::AgentKind;
 use crate::storage::{StorageConfig, list_runs, load_run, store_run};
+use crate::tui::run_tui;
 use crate::wrapper::{WrapperConfig, run_and_capture};
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -10,9 +11,10 @@ use tracing_subscriber::EnvFilter;
 #[derive(Parser)]
 #[command(name = "scotia")]
 #[command(about = "Semantic Decision Ledger for agentic systems")]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 
     /// Root directory for Scotia logs.
     #[arg(long, global = true, default_value = "scotia-log")]
@@ -94,12 +96,15 @@ pub async fn main() -> Result<()> {
     };
 
     match cli.command {
-        Commands::Run {
+        None => {
+            run_tui(storage_config).await?;
+        }
+        Some(Commands::Run {
             agent,
             task,
             cwd,
             command,
-        } => {
+        }) => {
             let program = command.first().cloned().context("no command provided")?;
             let args = command.into_iter().skip(1).collect();
             let agent_kind = AgentKind::from_binary_name(&agent);
@@ -120,13 +125,13 @@ pub async fn main() -> Result<()> {
             println!("  Summary: {}", stored.summary_path.display());
             println!("  Graph:   {}", stored.dot_path.display());
         }
-        Commands::Replay { path } => {
+        Some(Commands::Replay { path }) => {
             let run = load_run(&path).await?;
             for event in run.events {
                 println!("{}", serde_json::to_string(&event)?);
             }
         }
-        Commands::Summary { path } => {
+        Some(Commands::Summary { path }) => {
             let run = load_run(&path).await?;
             let synthesis = crate::synthesizer::synthesize(&run);
             println!("{}", synthesis.summary);
@@ -143,7 +148,7 @@ pub async fn main() -> Result<()> {
                 }
             }
         }
-        Commands::List => {
+        Some(Commands::List) => {
             let runs = list_runs(&storage_config.root).await?;
             if runs.is_empty() {
                 println!(
@@ -156,7 +161,7 @@ pub async fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Validate { path } => {
+        Some(Commands::Validate { path }) => {
             let run = load_run(&path).await?;
             let issues = validate(&run);
             if issues.is_empty() {
@@ -168,7 +173,7 @@ pub async fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Diff { left, right } => {
+        Some(Commands::Diff { left, right }) => {
             let left_run = load_run(&left).await?;
             let right_run = load_run(&right).await?;
             let diff = diff_runs(&left_run, &right_run);
@@ -179,7 +184,7 @@ pub async fn main() -> Result<()> {
             println!("Errors added:     {}", diff.errors_added);
             println!("Errors removed:   {}", diff.errors_removed);
         }
-        Commands::Regression { path } => {
+        Some(Commands::Regression { path }) => {
             let run = load_run(&path).await?;
             let suite = regression_suite(&run);
             println!("{}", render_regression_suite(&suite));

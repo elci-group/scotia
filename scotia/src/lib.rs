@@ -9,4 +9,5 @@ pub mod interceptors;
 pub mod normalizer;
 pub mod storage;
 pub mod synthesizer;
+pub mod tui;
 pub mod wrapper;
