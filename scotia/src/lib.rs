@@ -7,6 +7,8 @@ pub mod git;
 pub mod interceptor;
 pub mod interceptors;
 pub mod normalizer;
+pub mod notify;
+pub mod shim;
 pub mod storage;
 pub mod synthesizer;
 pub mod tui;

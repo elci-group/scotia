@@ -1,5 +1,10 @@
 use crate::algebra::{diff_runs, regression_suite, render_regression_suite, validate};
-use crate::event::AgentKind;
+use crate::event::{AgentKind, ScotiaEvent};
+use crate::notify::{Notifier, default_notifier, run_crashed, run_finished, run_started};
+use crate::shim::{
+    DEFAULT_AGENT_NAMES, default_shim_dir, detect_aliases, find_scotia_shim_binary,
+    install_shims, remove_shell_path, uninstall_shims, update_shell_path,
+};
 use crate::storage::{StorageConfig, list_runs, load_run, store_run};
 use crate::tui::run_tui;
 use crate::wrapper::{WrapperConfig, run_and_capture};
@@ -23,6 +28,10 @@ struct Cli {
     /// Commit each artifact to the surrounding Git repository.
     #[arg(long, global = true)]
     git_commit: bool,
+
+    /// Disable desktop notifications for this invocation.
+    #[arg(long, global = true)]
+    no_notify: bool,
 }
 
 #[derive(Subcommand)]
@@ -80,6 +89,32 @@ enum Commands {
         /// Path to the run JSON file.
         path: PathBuf,
     },
+
+    /// Install shims so agent commands are auto-wrapped.
+    InstallShims {
+        /// Directory where shims are created.
+        #[arg(long)]
+        shim_dir: Option<PathBuf>,
+    },
+
+    /// Remove Scotia shims from PATH.
+    UninstallShims {
+        /// Directory where shims were created.
+        #[arg(long)]
+        shim_dir: Option<PathBuf>,
+    },
+
+    /// Test the notification system.
+    Notify {
+        #[command(subcommand)]
+        command: Option<NotifyCommands>,
+    },
+}
+
+#[derive(Subcommand)]
+enum NotifyCommands {
+    /// Send a test notification for each severity level.
+    Test,
 }
 
 pub async fn main() -> Result<()> {
@@ -93,6 +128,11 @@ pub async fn main() -> Result<()> {
     let storage_config = StorageConfig {
         root: cli.log_root,
         commit_to_git: cli.git_commit,
+    };
+    let notifier: Box<dyn Notifier> = if cli.no_notify {
+        Box::new(crate::notify::TerminalNotifier)
+    } else {
+        default_notifier()
     };
 
     match cli.command {
@@ -108,16 +148,68 @@ pub async fn main() -> Result<()> {
             let program = command.first().cloned().context("no command provided")?;
             let args = command.into_iter().skip(1).collect();
             let agent_kind = AgentKind::from_binary_name(&agent);
+            let working_dir = cwd
+                .clone()
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_else(|| PathBuf::from("."));
+
+            notifier.notify(run_started(
+                agent_kind,
+                &working_dir,
+                task.as_deref(),
+            ))?;
 
             let config = WrapperConfig {
                 agent: agent_kind,
-                task,
+                task: task.clone(),
                 program,
                 args,
                 working_dir: cwd,
             };
 
             let run = run_and_capture(config).await?;
+
+            let actions = run
+                .events
+                .iter()
+                .filter(|e| matches!(e, ScotiaEvent::ActionInvoked { .. }))
+                .count();
+            let models = run
+                .events
+                .iter()
+                .filter(|e| matches!(e, ScotiaEvent::ModelRouted { .. }))
+                .count();
+            let errors = run
+                .events
+                .iter()
+                .filter(|e| matches!(e, ScotiaEvent::ErrorOrRetry { .. }))
+                .count();
+            let retries = run
+                .events
+                .iter()
+                .filter(|e| {
+                    matches!(
+                        e,
+                        ScotiaEvent::ErrorOrRetry {
+                            kind: crate::event::ErrorKind::Retry,
+                            ..
+                        }
+                    )
+                })
+                .count();
+
+            let exit_code = run.events.iter().find_map(|e| match e {
+                ScotiaEvent::RunFinished { exit_code, .. } => *exit_code,
+                _ => None,
+            });
+
+            let finish_note = if exit_code.map(|c| c != 0).unwrap_or(true) && errors > 0 {
+                run_crashed(agent_kind, exit_code)
+            } else {
+                run_finished(agent_kind, actions, models, errors, retries)
+            };
+            notifier.notify(finish_note)?;
+
             let stored = store_run(&storage_config, run).await?;
 
             println!("Scotia captured run {}", stored.run_id);
@@ -189,6 +281,48 @@ pub async fn main() -> Result<()> {
             let suite = regression_suite(&run);
             println!("{}", render_regression_suite(&suite));
         }
+        Some(Commands::InstallShims { shim_dir }) => {
+            let shim_dir = shim_dir.unwrap_or_else(default_shim_dir);
+            let scotia_shim = find_scotia_shim_binary()?;
+            let aliases = detect_aliases(DEFAULT_AGENT_NAMES);
+            if !aliases.is_empty() {
+                eprintln!("Detected shell aliases that may shadow shims:");
+                for a in &aliases {
+                    eprintln!("  - {}", a);
+                }
+                eprintln!("Consider removing them or re-sourcing your shell config.");
+            }
+            let result = install_shims(&shim_dir, &scotia_shim, DEFAULT_AGENT_NAMES)?;
+            update_shell_path(&shim_dir)?;
+            println!("Installed {} shims to {}", result.created.len(), shim_dir.display());
+            if !result.collisions.is_empty() {
+                eprintln!("Warning: existing binaries earlier in PATH:");
+                for c in &result.collisions {
+                    eprintln!("  - {}", c);
+                }
+            }
+            notifier.notify(crate::notify::shims_installed(result.created.len()))?;
+        }
+        Some(Commands::UninstallShims { shim_dir }) => {
+            let shim_dir = shim_dir.unwrap_or_else(default_shim_dir);
+            let removed = uninstall_shims(&shim_dir, DEFAULT_AGENT_NAMES)?;
+            remove_shell_path(&shim_dir)?;
+            println!("Removed {} shims from {}", removed.len(), shim_dir.display());
+            notifier.notify(crate::notify::shims_uninstalled())?;
+        }
+        Some(Commands::Notify { command }) => match command {
+            None | Some(NotifyCommands::Test) => {
+                for n in [
+                    crate::notify::daemon_started(),
+                    crate::notify::run_started(AgentKind::KimiCode, &std::env::current_dir()?, None),
+                    crate::notify::run_finished(AgentKind::KimiCode, 12, 3, 0, 0),
+                    crate::notify::run_finished(AgentKind::Codex, 12, 3, 2, 1),
+                    crate::notify::run_crashed(AgentKind::ClaudeCode, Some(1)),
+                ] {
+                    notifier.notify(n)?;
+                }
+            }
+        },
     }
 
     Ok(())
