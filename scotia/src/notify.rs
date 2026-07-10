@@ -74,12 +74,23 @@ pub trait Notifier: Send + Sync {
     fn notify(&self, notification: Notification) -> anyhow::Result<()>;
 }
 
+/// Remove control characters (including the ANSI `ESC` introducer) from text
+/// destined for a terminal, keeping newlines and tabs. Prevents a crafted
+/// `task`/`cwd` from injecting terminal escape sequences.
+fn strip_control_chars(s: &str) -> String {
+    s.chars()
+        .filter(|&c| c == '\n' || c == '\t' || !c.is_control())
+        .collect()
+}
+
 /// Print the notification to stderr. Always available.
 pub struct TerminalNotifier;
 
 impl Notifier for TerminalNotifier {
     fn notify(&self, n: Notification) -> anyhow::Result<()> {
-        eprintln!("{} [{}] {} — {}", n.level.icon(), n.level, n.title, n.body);
+        let title = strip_control_chars(&n.title);
+        let body = strip_control_chars(&n.body);
+        eprintln!("{} [{}] {} — {}", n.level.icon(), n.level, title, body);
         Ok(())
     }
 }
@@ -119,6 +130,27 @@ impl Notifier for TestNotifier {
     }
 }
 
+/// Escape text for display in a freedesktop desktop notification.
+///
+/// The freedesktop notification spec permits a small HTML markup subset
+/// (including `<a href>` hyperlinks) in the summary and body, and `notify-rust`
+/// does not escape for us. Neutralise the markup-significant characters so a
+/// `task` or `cwd` string cannot render as markup or a clickable link.
+#[cfg(feature = "notify")]
+fn escape_desktop_markup(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
 /// Desktop notification backend via D-Bus / macOS Notification Center.
 #[cfg(feature = "notify")]
 pub struct DesktopNotifier {
@@ -140,8 +172,12 @@ impl Notifier for DesktopNotifier {
         let mut builder = notify_rust::Notification::new();
         builder
             .appname(&self.app_name)
-            .summary(&format!("{} {}", n.level.icon(), n.title))
-            .body(&n.body);
+            .summary(&format!(
+                "{} {}",
+                n.level.icon(),
+                escape_desktop_markup(&n.title)
+            ))
+            .body(&escape_desktop_markup(&n.body));
 
         match n.level {
             NotificationLevel::Mayday => {

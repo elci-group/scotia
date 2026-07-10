@@ -2,6 +2,7 @@ use super::*;
 use crate::event::{ErrorKind, ScotiaEvent};
 use crate::interceptor::{AgentInterceptor, InterceptorContext, StreamSource};
 use regex::Regex;
+use std::sync::OnceLock;
 
 /// Cosine agent interceptor.
 ///
@@ -63,11 +64,12 @@ fn try_parse_model_routed(ctx: &InterceptorContext, line: &str) -> Option<Scotia
     //   MODEL planner -> groq
     //   USING_MODEL planner groq
     //   ROUTE to planner groq
-    let re = Regex::new(
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let cap = cached_regex(
+        &RE,
         r"(?i)^(?:MODEL|USING_MODEL|ROUTE)\s+(?:to\s+)?([\w_-]+)(?:\s*(?:=|->)\s*|\s+)([\w_.:-]+)$",
     )
-    .unwrap();
-    let cap = re.captures(line)?;
+    .captures(line)?;
     let stage = cap[1].to_string();
     let model = cap[2].to_string();
     Some(emit_model_routed(ctx, stage, model, None))
@@ -75,8 +77,8 @@ fn try_parse_model_routed(ctx: &InterceptorContext, line: &str) -> Option<Scotia
 
 fn try_parse_action_invoked(ctx: &InterceptorContext, line: &str) -> Option<ScotiaEvent> {
     // Cosine emits lines like: "ACTION read_file path=src/main.rs"
-    let re = Regex::new(r"(?i)^ACTION\s+(\w+)\s*(.*)$").unwrap();
-    let cap = re.captures(line)?;
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let cap = cached_regex(&RE, r"(?i)^ACTION\s+(\w+)\s*(.*)$").captures(line)?;
     let tool = cap[1].to_lowercase();
     let rest = cap[2].to_string();
     let target = parse_target(&rest);
@@ -96,8 +98,10 @@ fn parse_target(rest: &str) -> Option<String> {
 
 fn try_parse_state_delta(ctx: &InterceptorContext, line: &str) -> Option<ScotiaEvent> {
     // Explicit edit/diff/patch annotation with path.
-    let explicit = Regex::new(r"(?i)^(EDIT|DIFF|PATCH)\s+path=(\S+)(?:\s+(.*))?$").unwrap();
-    if let Some(cap) = explicit.captures(line) {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    if let Some(cap) =
+        cached_regex(&RE, r"(?i)^(EDIT|DIFF|PATCH)\s+path=(\S+)(?:\s+(.*))?$").captures(line)
+    {
         let path = cap[2].to_string();
         let description = cap.get(3).map(|m| m.as_str().to_string());
         return Some(emit_state_delta(ctx, Some(path), None, description));
@@ -123,8 +127,12 @@ fn try_parse_state_delta(ctx: &InterceptorContext, line: &str) -> Option<ScotiaE
 }
 
 fn try_parse_error_retry(ctx: &InterceptorContext, line: &str) -> Option<ScotiaEvent> {
-    let re = Regex::new(r"(?i)^(?:ERROR|ERR|FAILED|FAIL|RETRY)\s*[:=-]?\s*(.*)$").unwrap();
-    let cap = re.captures(line)?;
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let cap = cached_regex(
+        &RE,
+        r"(?i)^(?:ERROR|ERR|FAILED|FAIL|RETRY)\s*[:=-]?\s*(.*)$",
+    )
+    .captures(line)?;
     let message = cap[1].to_string();
     let kind = if line.to_uppercase().starts_with("RETRY") {
         ErrorKind::Retry

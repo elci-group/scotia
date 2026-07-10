@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::fs;
-use std::os::unix::fs::symlink;
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, symlink};
 use std::path::{Path, PathBuf};
 
 /// Default set of agent binary names to shim.
@@ -17,10 +19,13 @@ pub const DEFAULT_AGENT_NAMES: &[&str] = &[
 
 /// Where shims are installed.
 pub fn default_shim_dir() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("~"))
-        .join("scotia")
-        .join("shims")
+    // Prefer the per-user data dir; if that is unavailable, derive it from the
+    // home directory; as a last resort use the process temp dir. Never emit a
+    // literal `~` component (it is not expanded by `PathBuf`).
+    let base = dirs::data_dir()
+        .or_else(|| dirs::home_dir().map(|h| h.join(".local").join("share")))
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("scotia").join("shims")
 }
 
 /// Result of installing shims.
@@ -29,6 +34,29 @@ pub struct InstallResult {
     pub created: Vec<String>,
     pub skipped: Vec<String>,
     pub collisions: Vec<String>,
+}
+
+/// Returns true when `path` is a regular file that is executable and is not
+/// writable by group/others (i.e. it could only have been modified by its
+/// owner). Used to vet binaries resolved from `PATH` before we execute them,
+/// so a world-writable impostor earlier in `PATH` cannot be run.
+pub fn is_safe_executable(path: &Path) -> bool {
+    let Ok(meta) = fs::metadata(path) else {
+        return false;
+    };
+    if !meta.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        let mode = meta.mode();
+        // Executable by someone, and not writable by group or others.
+        mode & 0o111 != 0 && mode & 0o022 == 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 /// Install shims by symlinking agent names to the scotia-shim binary.
@@ -63,6 +91,7 @@ pub fn install_shims(
             }
         }
 
+        #[cfg(unix)]
         symlink(scotia_shim, &link_path)
             .with_context(|| format!("failed to create shim symlink for {}", name))?;
         result.created.push((*name).to_string());
@@ -131,7 +160,7 @@ fn path_block(shim_dir: &Path) -> String {
 }
 
 fn shell_rc_files() -> Vec<PathBuf> {
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("~"));
+    let home = dirs::home_dir().unwrap_or_else(std::env::temp_dir);
     vec![
         home.join(".bashrc"),
         home.join(".zshrc"),
@@ -158,7 +187,8 @@ fn find_in_path(name: &str, entries: &[PathBuf]) -> Option<PathBuf> {
     None
 }
 
-/// Locate the scotia-shim binary. Prefers the cargo-built sibling, then PATH.
+/// Locate the scotia-shim binary. Prefers the cargo-built sibling, then PATH
+/// (vetting each PATH candidate with [`is_safe_executable`]).
 pub fn find_scotia_shim_binary() -> Result<PathBuf> {
     let exe = std::env::current_exe()?;
     let sibling = exe
@@ -170,7 +200,7 @@ pub fn find_scotia_shim_binary() -> Result<PathBuf> {
     }
     for dir in path_entries() {
         let candidate = dir.join("scotia-shim");
-        if candidate.exists() {
+        if is_safe_executable(&candidate) {
             return Ok(candidate);
         }
     }
@@ -226,5 +256,80 @@ mod tests {
         let block = path_block(Path::new("/home/sal/.local/share/scotia/shims"));
         assert!(block.contains("/home/sal/.local/share/scotia/shims"));
         assert!(block.contains("Scotia shims"));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pinned agent paths (L4 hardening)
+// ---------------------------------------------------------------------------
+
+/// Path to the optional agent-pin file. Override with `SCOTIA_AGENT_PINS` for
+/// testing or custom locations.
+pub fn agent_pins_path() -> PathBuf {
+    if let Some(p) = std::env::var_os("SCOTIA_AGENT_PINS") {
+        return PathBuf::from(p);
+    }
+    dirs::config_dir()
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_else(std::env::temp_dir)
+                .join(".config")
+        })
+        .join("scotia")
+        .join("agents.json")
+}
+
+/// Load agent pins from an arbitrary path. The file is a small JSON object
+/// mapping agent kind to an absolute binary path, e.g.
+/// `{ "claude-code": "/usr/local/bin/claude" }`. Missing or malformed files
+/// yield an empty map (pins are strictly optional).
+pub fn load_agent_pins_from(path: &Path) -> HashMap<String, String> {
+    let Ok(text) = fs::read_to_string(path) else {
+        return HashMap::new();
+    };
+    serde_json::from_str::<HashMap<String, String>>(&text).unwrap_or_default()
+}
+
+/// Load agent pins from the default location.
+pub fn load_agent_pins() -> HashMap<String, String> {
+    load_agent_pins_from(&agent_pins_path())
+}
+
+/// Return the pinned absolute path for `kind`, if one is configured.
+pub fn pinned_agent_path(kind: crate::event::AgentKind) -> Option<PathBuf> {
+    load_agent_pins().get(kind.as_str()).map(PathBuf::from)
+}
+
+#[cfg(test)]
+mod pins_tests {
+    use super::*;
+
+    #[test]
+    fn loads_pins_from_json_object() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("agents.json");
+        fs::write(
+            &path,
+            r#"{ "claude-code": "/usr/local/bin/claude", "kimi-code": "/opt/kimi" }"#,
+        )
+        .unwrap();
+
+        let pins = load_agent_pins_from(&path);
+        assert_eq!(
+            pins.get("claude-code").map(String::as_str),
+            Some("/usr/local/bin/claude")
+        );
+        assert_eq!(pins.get("kimi-code").map(String::as_str), Some("/opt/kimi"));
+        assert_eq!(pins.get("codex"), None);
+    }
+
+    #[test]
+    fn missing_or_malformed_pins_yields_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(load_agent_pins_from(&tmp.path().join("nope.json")).is_empty());
+
+        let bad = tmp.path().join("bad.json");
+        fs::write(&bad, "not json").unwrap();
+        assert!(load_agent_pins_from(&bad).is_empty());
     }
 }

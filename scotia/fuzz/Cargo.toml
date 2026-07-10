@@ -1,0 +1,31 @@
+[package]
+name = "scotia-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Standalone workspace so this crate is never pulled into the root package's
+# build/clippy/test runs (it needs nightly + cargo-fuzz to actually link).
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+scotia = { path = ".." }
+serde_json = "1.0"
+
+[[bin]]
+name = "fuzz_daemon_request"
+path = "fuzz_targets/fuzz_daemon_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_interceptors"
+path = "fuzz_targets/fuzz_interceptors.rs"
+test = false
+doc = false
+bench = false

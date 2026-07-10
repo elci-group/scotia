@@ -8,6 +8,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+mod server;
+pub use server::handle_client;
+
 /// In-memory state kept by `scotiad`.
 #[derive(Debug, Default)]
 pub struct DaemonState {

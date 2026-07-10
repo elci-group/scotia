@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>Scotia</title>
+    <organization>com.scotia</organization>
+    <domains enable_localSystem="true" enable_anywhere="true"/>
+    <options customize="never" require-scripts="true" rootVolumeOnly="false"/>
+
+    <background file="logo.png" scaling="proportional" alignment="center"/>
+    <license file="LICENSE"/>
+
+    <choices-outline>
+        <line choice="scotia"/>
+    </choices-outline>
+
+    <choice id="scotia" title="Scotia" description="Installs the Scotia daemon, CLI and agent shims." enabled="true" selected="true">
+        <pkg-ref id="com.scotia.scotia"/>
+    </choice>
+
+    <pkg-ref id="com.scotia.scotia" version="0.1.1" onConclusion="none">scotia.pkg</pkg-ref>
+</installer-gui-script>

@@ -1,4 +1,3 @@
-use crate::event::AgentKind;
 use crate::storage::{StorageConfig, store_run};
 use crate::wrapper::{WrapperConfig, run_and_capture};
 use anyhow::Result;
@@ -13,88 +12,9 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph};
 use std::io::{self, IsTerminal};
-use std::path::PathBuf;
 
-/// A harness that Scotia can wrap and observe.
-#[derive(Debug, Clone)]
-pub struct Harness {
-    pub display_name: String,
-    pub agent: AgentKind,
-    pub binary: PathBuf,
-    pub args: Vec<String>,
-}
-
-impl Harness {
-    pub fn new(display_name: impl Into<String>, agent: AgentKind, binary: PathBuf) -> Self {
-        Self {
-            display_name: display_name.into(),
-            agent,
-            binary,
-            args: Vec::new(),
-        }
-    }
-}
-
-/// Detect installed agent harnesses by scanning PATH for known binaries.
-pub fn detect_harnesses() -> Vec<Harness> {
-    detect_harnesses_with_path(std::env::var_os("PATH").unwrap_or_default().as_os_str())
-}
-
-/// Detect harnesses using a provided PATH-style string (testable entry point).
-pub fn detect_harnesses_with_path(path: &std::ffi::OsStr) -> Vec<Harness> {
-    let candidates = vec![
-        (
-            "claude-code",
-            AgentKind::ClaudeCode,
-            vec!["claude", "claude-code", "claude_code"],
-        ),
-        (
-            "kimi-code",
-            AgentKind::KimiCode,
-            vec!["kimi", "kimi-code", "kimi_code"],
-        ),
-        (
-            "codex",
-            AgentKind::Codex,
-            vec!["codex", "codex-cli", "codex_cli"],
-        ),
-        ("agy", AgentKind::Agy, vec!["agy"]),
-        ("cosine", AgentKind::Cosine, vec!["cosine"]),
-        ("opencode", AgentKind::Opencode, vec!["opencode"]),
-    ];
-
-    let mut harnesses = Vec::new();
-
-    for (display, agent, names) in candidates {
-        for name in names {
-            if let Some(bin) = find_in_path(name, path) {
-                harnesses.push(Harness::new(display, agent, bin));
-                break;
-            }
-        }
-    }
-
-    harnesses
-}
-
-fn find_in_path(name: &str, path: &std::ffi::OsStr) -> Option<PathBuf> {
-    std::env::split_paths(path)
-        .map(|dir| dir.join(name))
-        .find(|full| full.is_file() && is_executable(full))
-}
-
-#[cfg(unix)]
-fn is_executable(path: &PathBuf) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(path)
-        .map(|m| m.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
-}
-
-#[cfg(not(unix))]
-fn is_executable(_path: &PathBuf) -> bool {
-    true
-}
+mod detect;
+pub use detect::{Harness, detect_harnesses, detect_harnesses_with_path};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Focus {
@@ -439,4 +359,80 @@ fn ui(f: &mut ratatui::Frame, app: &App) {
         ));
     }
     f.render_widget(Paragraph::new(footer), chunks[3]);
+}
+
+#[cfg(test)]
+mod render_tests {
+    use super::*;
+    use crate::event::AgentKind;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use std::path::PathBuf;
+
+    fn buffer_string(buf: &ratatui::buffer::Buffer) -> String {
+        let mut s = String::new();
+        for cell in buf.content() {
+            s.push_str(cell.symbol());
+        }
+        s
+    }
+
+    /// Golden-ish smoke test: render the main view with a deterministic harness
+    /// and assert the key regions are present. Catches accidental layout drift
+    /// across ratatui upgrades without pinning every cell.
+    #[test]
+    fn ui_renders_harness_list_and_footer() {
+        let mut state = ListState::default();
+        state.select(Some(0));
+        let app = App {
+            harnesses: vec![Harness::new(
+                "claude-code",
+                AgentKind::ClaudeCode,
+                PathBuf::from("/usr/bin/claude"),
+            )],
+            state,
+            task: String::new(),
+            focus: Focus::HarnessList,
+            storage: StorageConfig::default(),
+            message: None,
+            ran_harness: false,
+        };
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| ui(f, &app)).unwrap();
+
+        let rendered = buffer_string(terminal.backend().buffer());
+        assert!(rendered.contains("Scotia"), "title missing");
+        assert!(
+            rendered.contains("Installed harnesses"),
+            "list block missing"
+        );
+        assert!(rendered.contains("claude-code"), "harness name missing");
+        assert!(rendered.contains("/usr/bin/claude"), "binary path missing");
+        assert!(rendered.contains("Enter: run"), "footer help missing");
+    }
+
+    #[test]
+    fn ui_renders_empty_state_help() {
+        let app = App {
+            harnesses: vec![],
+            state: ListState::default(),
+            task: String::new(),
+            focus: Focus::HarnessList,
+            storage: StorageConfig::default(),
+            message: None,
+            ran_harness: false,
+        };
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| ui(f, &app)).unwrap();
+
+        let rendered = buffer_string(terminal.backend().buffer());
+        assert!(
+            rendered.contains("No harnesses detected"),
+            "empty help missing"
+        );
+    }
 }

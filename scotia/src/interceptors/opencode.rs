@@ -1,10 +1,11 @@
 use crate::event::{ActionStatus, ErrorKind, ScotiaEvent};
 use crate::interceptor::{AgentInterceptor, InterceptorContext, StreamSource};
 use crate::interceptors::{
-    classify_stderr, emit_action_invoked, emit_action_result, emit_error_or_retry,
+    cached_regex, classify_stderr, emit_action_invoked, emit_action_result, emit_error_or_retry,
     emit_model_routed, emit_response_chunk, emit_state_delta,
 };
 use regex::Regex;
+use std::sync::OnceLock;
 
 /// Parser for opencode agent telemetry.
 ///
@@ -81,9 +82,9 @@ impl AgentInterceptor for OpencodeInterceptor {
         }
 
         // Explicit retry markers: "[RETRY] [2] connection timed out".
-        if let Some(cap) = Regex::new(r"(?i)^\[RETRY\](?:\s*\[(\d+)\])?\s*(.+)$")
-            .unwrap()
-            .captures(trimmed)
+        static RE_RETRY: OnceLock<Regex> = OnceLock::new();
+        if let Some(cap) =
+            cached_regex(&RE_RETRY, r"(?i)^\[RETRY\](?:\s*\[(\d+)\])?\s*(.+)$").captures(trimmed)
         {
             let retry_count = cap.get(1).and_then(|m| m.as_str().parse::<u32>().ok());
             events.push(emit_error_or_retry(
@@ -96,10 +97,8 @@ impl AgentInterceptor for OpencodeInterceptor {
         }
 
         // Explicit error markers.
-        if let Some(cap) = Regex::new(r"(?i)^\[ERROR\]\s*(.+)$")
-            .unwrap()
-            .captures(trimmed)
-        {
+        static RE_ERROR: OnceLock<Regex> = OnceLock::new();
+        if let Some(cap) = cached_regex(&RE_ERROR, r"(?i)^\[ERROR\]\s*(.+)$").captures(trimmed) {
             events.push(emit_error_or_retry(
                 ctx,
                 ErrorKind::ToolError,
@@ -117,9 +116,13 @@ impl AgentInterceptor for OpencodeInterceptor {
         //   model: ollama
         //   Routing to openai
         //   Using model: local
-        let routing_re =
-            Regex::new(r"(?i)^(?:\[MODEL\]\s*)?(\w+)\s*(?:[:=]|->)\s*([a-z0-9_-]+)$").unwrap();
-        if let Some(cap) = routing_re.captures(trimmed) {
+        static RE_ROUTING: OnceLock<Regex> = OnceLock::new();
+        if let Some(cap) = cached_regex(
+            &RE_ROUTING,
+            r"(?i)^(?:\[MODEL\]\s*)?(\w+)\s*(?:[:=]|->)\s*([a-z0-9_-]+)$",
+        )
+        .captures(trimmed)
+        {
             let stage_key = cap[1].to_lowercase();
             let known = [
                 "planner",
@@ -139,10 +142,11 @@ impl AgentInterceptor for OpencodeInterceptor {
             }
         }
 
-        if let Some(cap) = Regex::new(
+        static RE_MODEL2: OnceLock<Regex> = OnceLock::new();
+        if let Some(cap) = cached_regex(
+            &RE_MODEL2,
             r"(?i)(?:using model|routed to|routing to|model|routing)\s*(?:[:=])?\s+([a-z0-9_-]+)",
         )
-        .unwrap()
         .captures(trimmed)
         {
             events.push(emit_model_routed(ctx, "inference", &cap[1], None));
@@ -155,10 +159,12 @@ impl AgentInterceptor for OpencodeInterceptor {
         //   [TOOL] read_file: src/main.rs
         //   [ACTION] bash: cargo test
         //   ▸ grep: pattern src/
-        if let Some(cap) =
-            Regex::new(r"(?i)^(?:\[TOOL\]|\[ACTION\]|[▸●›>])\s*(\w+)\s*[:：]\s*(.+)$")
-                .unwrap()
-                .captures(trimmed)
+        static RE_TOOL: OnceLock<Regex> = OnceLock::new();
+        if let Some(cap) = cached_regex(
+            &RE_TOOL,
+            r"(?i)^(?:\[TOOL\]|\[ACTION\]|[▸●›>])\s*(\w+)\s*[:：]\s*(.+)$",
+        )
+        .captures(trimmed)
         {
             let tool = cap[1].to_lowercase();
             let target = cap[2].to_string();
@@ -173,12 +179,12 @@ impl AgentInterceptor for OpencodeInterceptor {
 
         // Action results: "[RESULT] status: success exit_code: 0".
         if trimmed.to_uppercase().starts_with("[RESULT]") {
-            let status = Regex::new(r"(?i)status\s*[:=]\s*(\w+)")
-                .unwrap()
+            static RE_STATUS: OnceLock<Regex> = OnceLock::new();
+            static RE_EXIT: OnceLock<Regex> = OnceLock::new();
+            let status = cached_regex(&RE_STATUS, r"(?i)status\s*[:=]\s*(\w+)")
                 .captures(trimmed)
                 .and_then(|c| parse_action_status(&c[1]));
-            let exit_code = Regex::new(r"(?i)exit(?:_code)?\s*[:=]\s*(-?\d+)")
-                .unwrap()
+            let exit_code = cached_regex(&RE_EXIT, r"(?i)exit(?:_code)?\s*[:=]\s*(-?\d+)")
                 .captures(trimmed)
                 .and_then(|c| c[1].parse::<i32>().ok());
             events.push(emit_action_result(ctx, status, None, None, exit_code));

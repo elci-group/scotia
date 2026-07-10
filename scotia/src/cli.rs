@@ -1,25 +1,20 @@
+mod daemon;
+mod run;
+
 use crate::algebra::{diff_runs, regression_suite, render_regression_suite, validate};
-use crate::event::{AgentKind, ScotiaEvent};
-use crate::ipc::{
-    DaemonRequest, DaemonResponse, default_log_file, default_pid_file, default_socket_path,
-};
-use crate::ipc_transport::{
-    finish_run as daemon_finish_run, register_run as daemon_register_run, request, try_connect,
-};
-use crate::notify::{Notifier, default_notifier, run_crashed, run_finished, run_started};
+use crate::event::AgentKind;
+use crate::notify::{Notifier, default_notifier};
 use crate::shim::{
     DEFAULT_AGENT_NAMES, default_shim_dir, detect_aliases, find_scotia_shim_binary, install_shims,
     remove_shell_path, uninstall_shims, update_shell_path,
 };
-use crate::storage::{StorageConfig, list_runs, load_run, store_run};
+use crate::storage::{StorageConfig, list_runs, load_run};
 use crate::tui::run_tui;
-use crate::wrapper::{WrapperConfig, run_and_capture};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
-use uuid::Uuid;
 
 #[derive(Parser)]
 #[command(name = "scotia")]
@@ -57,6 +52,16 @@ enum Commands {
         /// Working directory for the agent.
         #[arg(short, long)]
         cwd: Option<PathBuf>,
+
+        /// Absolute path to the agent binary; bypasses PATH resolution. When
+        /// set, the positional arguments after `--` become the agent's args.
+        #[arg(long)]
+        agent_path: Option<PathBuf>,
+
+        /// Do not resolve the agent via PATH: require --agent-path, a pinned
+        /// path in agents.json, or an absolute program path.
+        #[arg(long, default_value_t = false)]
+        no_path_fallback: bool,
 
         /// Program and arguments for the agent.
         #[arg(required = true, num_args = 1..)]
@@ -123,6 +128,34 @@ enum Commands {
         #[command(subcommand)]
         command: DaemonCommands,
     },
+
+    /// Apply an installation (used by GUI installers).
+    Installer {
+        #[command(subcommand)]
+        command: InstallerCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum InstallerCommands {
+    /// Apply the installation with the chosen scope.
+    Apply {
+        /// Installation scope.
+        #[arg(long, value_enum, default_value_t = crate::installer::InstallScope::User)]
+        scope: crate::installer::InstallScope,
+
+        /// Start the daemon automatically.
+        #[arg(long, default_value_t = true)]
+        autostart: bool,
+
+        /// Install PATH shims for agent binaries.
+        #[arg(long, default_value_t = true)]
+        install_shims: bool,
+
+        /// Directory containing the Scotia binaries.
+        #[arg(long, default_value = None)]
+        bin_dir: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -173,97 +206,21 @@ pub async fn main() -> Result<()> {
             agent,
             task,
             cwd,
+            agent_path,
+            no_path_fallback,
             command,
         }) => {
-            let program = command.first().cloned().context("no command provided")?;
-            let args = command.into_iter().skip(1).collect();
-            let agent_kind = AgentKind::from_binary_name(&agent);
-            let working_dir = cwd
-                .clone()
-                .or_else(|| std::env::current_dir().ok())
-                .unwrap_or_else(|| PathBuf::from("."));
-            let run_id = Uuid::new_v4();
-            let socket_path = default_socket_path();
-
-            // Notify locally and register with the daemon (best effort).
-            notifier.notify(run_started(agent_kind, &working_dir, task.as_deref()))?;
-            daemon_register_run(
-                &socket_path,
-                run_id,
-                agent_kind,
-                task.clone(),
-                working_dir.clone(),
+            run::run_command(
+                agent,
+                task,
+                cwd,
+                agent_path,
+                no_path_fallback,
+                command,
+                &storage_config,
+                &notifier,
             )
-            .await;
-
-            let config = WrapperConfig {
-                agent: agent_kind,
-                task: task.clone(),
-                program,
-                args,
-                working_dir: cwd,
-                run_id: Some(run_id),
-            };
-
-            let run = run_and_capture(config).await?;
-
-            let actions = run
-                .events
-                .iter()
-                .filter(|e| matches!(e, ScotiaEvent::ActionInvoked { .. }))
-                .count();
-            let models = run
-                .events
-                .iter()
-                .filter(|e| matches!(e, ScotiaEvent::ModelRouted { .. }))
-                .count();
-            let errors = run
-                .events
-                .iter()
-                .filter(|e| matches!(e, ScotiaEvent::ErrorOrRetry { .. }))
-                .count();
-            let retries = run
-                .events
-                .iter()
-                .filter(|e| {
-                    matches!(
-                        e,
-                        ScotiaEvent::ErrorOrRetry {
-                            kind: crate::event::ErrorKind::Retry,
-                            ..
-                        }
-                    )
-                })
-                .count();
-
-            let exit_code = run.events.iter().find_map(|e| match e {
-                ScotiaEvent::RunFinished { exit_code, .. } => *exit_code,
-                _ => None,
-            });
-
-            let finish_note = if exit_code.map(|c| c != 0).unwrap_or(true) && errors > 0 {
-                run_crashed(agent_kind, exit_code)
-            } else {
-                run_finished(agent_kind, actions, models, errors, retries)
-            };
-            notifier.notify(finish_note.clone())?;
-            daemon_finish_run(
-                &socket_path,
-                run_id,
-                exit_code,
-                actions,
-                models,
-                errors,
-                retries,
-            )
-            .await;
-
-            let stored = store_run(&storage_config, run).await?;
-
-            println!("Scotia captured run {}", stored.run_id);
-            println!("  JSON:    {}", stored.json_path.display());
-            println!("  Summary: {}", stored.summary_path.display());
-            println!("  Graph:   {}", stored.dot_path.display());
+            .await?;
         }
         Some(Commands::Replay { path }) => {
             let run = load_run(&path).await?;
@@ -387,144 +344,30 @@ pub async fn main() -> Result<()> {
                 }
             }
         },
+        Some(Commands::Installer { command }) => match command {
+            InstallerCommands::Apply {
+                scope,
+                autostart,
+                install_shims,
+                bin_dir,
+            } => {
+                let options = crate::installer::InstallOptions {
+                    scope,
+                    autostart,
+                    install_shims,
+                    bin_dir: bin_dir.unwrap_or_else(crate::installer::default_bin_dir),
+                };
+                crate::installer::apply_install(&options)?;
+                println!(
+                    "Scotia installed ({scope} scope)",
+                    scope = options.scope.as_str()
+                );
+            }
+        },
         Some(Commands::Daemon { command }) => {
-            handle_daemon_command(command).await?;
+            daemon::handle_daemon_command(command).await?;
         }
     }
 
     Ok(())
-}
-
-async fn handle_daemon_command(command: DaemonCommands) -> Result<()> {
-    let socket_path = default_socket_path();
-    let pid_file = default_pid_file();
-    let log_file = default_log_file();
-
-    match command {
-        DaemonCommands::Start => {
-            if try_connect(&socket_path).await.is_some() {
-                println!("scotiad is already running");
-                return Ok(());
-            }
-            if let Some(parent) = log_file.parent() {
-                tokio::fs::create_dir_all(parent).await.ok();
-            }
-            let scotiad = std::env::current_exe()?
-                .parent()
-                .map(|p| p.join("scotiad"))
-                .filter(|p| p.exists())
-                .unwrap_or_else(|| PathBuf::from("scotiad"));
-
-            let log = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&log_file)
-                .with_context(|| format!("failed to open daemon log {}", log_file.display()))?;
-
-            let mut cmd = tokio::process::Command::new(scotiad);
-            cmd.arg("--socket")
-                .arg(&socket_path)
-                .arg("--pid-file")
-                .arg(&pid_file)
-                .stdout(std::process::Stdio::from(log.try_clone()?))
-                .stderr(std::process::Stdio::from(log))
-                .kill_on_drop(false);
-
-            let child = cmd.spawn().context("failed to spawn scotiad")?;
-            println!("Started scotiad (PID {})", child.id().unwrap_or(0));
-        }
-        DaemonCommands::Stop => {
-            let pid: Option<i32> = if pid_file.exists() {
-                tokio::fs::read_to_string(&pid_file)
-                    .await
-                    .ok()
-                    .and_then(|s| s.trim().parse().ok())
-            } else {
-                None
-            };
-
-            if let Some(pid) = pid {
-                std::process::Command::new("kill")
-                    .arg("-TERM")
-                    .arg(pid.to_string())
-                    .status()
-                    .context("failed to send SIGTERM to scotiad")?;
-                println!("Sent SIGTERM to scotiad (PID {})", pid);
-            } else {
-                println!("No PID file found; scotiad may not be running");
-            }
-        }
-        DaemonCommands::Status => {
-            let mut stream = match try_connect(&socket_path).await {
-                Some(s) => s,
-                None => {
-                    println!("scotiad is not running");
-                    return Ok(());
-                }
-            };
-            let resp = request(&mut stream, DaemonRequest::Ping).await?;
-            match resp {
-                DaemonResponse::Pong => println!("scotiad is running"),
-                _ => println!("unexpected response from scotiad"),
-            }
-
-            let resp = request(&mut stream, DaemonRequest::ListRuns).await?;
-            if let DaemonResponse::Runs { runs } = resp {
-                let active = runs.iter().filter(|r| r.is_active()).count();
-                println!("Active runs: {}", active);
-                println!("Recent runs:");
-                for run in runs.iter().take(10) {
-                    let status = if run.is_active() {
-                        "active".to_string()
-                    } else {
-                        format!("finished (exit {})", run.exit_code.unwrap_or(-1))
-                    };
-                    println!(
-                        "  {} — {} — {} — {}",
-                        run.run_id.to_string().split('-').next().unwrap_or("?"),
-                        run.agent.as_str(),
-                        status,
-                        format_duration(run.duration().to_std().unwrap_or_default())
-                    );
-                }
-            }
-        }
-        DaemonCommands::Logs => {
-            if log_file.exists() {
-                let contents = tokio::fs::read_to_string(&log_file).await?;
-                print!("{}", contents);
-            } else {
-                println!("No daemon log found at {}", log_file.display());
-            }
-        }
-        DaemonCommands::InstallService => {
-            let result = crate::service::install_service()?;
-            println!("Installed {} service", result.platform.as_str());
-            if let Some(path) = result.installed_path {
-                println!("  -> {}", path.display());
-            }
-            if !result.output.is_empty() {
-                println!("{}", result.output);
-            }
-        }
-        DaemonCommands::UninstallService => {
-            let result = crate::service::uninstall_service()?;
-            println!("Uninstalled {} service", result.platform.as_str());
-            if !result.output.is_empty() {
-                println!("{}", result.output);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn format_duration(d: std::time::Duration) -> String {
-    let secs = d.as_secs();
-    if secs < 60 {
-        format!("{}s", secs)
-    } else if secs < 3600 {
-        format!("{}m {}s", secs / 60, secs % 60)
-    } else {
-        format!("{}h {}m {}s", secs / 3600, (secs % 3600) / 60, secs % 60)
-    }
 }

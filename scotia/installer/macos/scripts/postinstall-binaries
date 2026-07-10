@@ -1,0 +1,23 @@
+#!/bin/bash
+# Install Scotia binaries to the chosen location.
+set -e
+
+if [ "$EUID" -eq 0 ]; then
+    SCOPE="system"
+    BIN_DIR="/usr/local/bin"
+else
+    SCOPE="user"
+    BIN_DIR="$HOME/.local/bin"
+fi
+
+mkdir -p "$BIN_DIR"
+cp -f "${PWD}/payload/scotia"      "$BIN_DIR/scotia"
+cp -f "${PWD}/payload/scotiad"     "$BIN_DIR/scotiad"
+cp -f "${PWD}/payload/scotia-shim" "$BIN_DIR/scotia-shim"
+chmod +x "$BIN_DIR/scotia" "$BIN_DIR/scotiad" "$BIN_DIR/scotia-shim"
+
+# Persist the chosen scope/bin_dir for the other package scripts.
+mkdir -p /tmp/scotia-install
+printf '%s\n%s\n' "$SCOPE" "$BIN_DIR" > /tmp/scotia-install/env
+
+exit 0

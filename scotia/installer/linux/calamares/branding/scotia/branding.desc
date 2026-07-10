@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: no
+# SPDX-License-Identifier: CC0-1.0
+---
+componentName: scotia
+
+welcomeStyleCalamares: true
+welcomeExpandingLogo: true
+
+windowExpanding: normal
+windowSize: 900px,580px
+windowPlacement: center
+
+sidebar: widget
+navigation: widget
+
+strings:
+    productName:         Scotia
+    shortProductName:    Scotia
+    version:             0.1.1
+    shortVersion:        0.1.1
+    versionedName:       Scotia 0.1.1
+    shortVersionedName:  Scotia 0.1.1
+    bootloaderEntryName: Scotia
+    productUrl:          https://github.com/elci-group/scotia
+    supportUrl:          https://github.com/elci-group/scotia/issues
+    knownIssuesUrl:      https://github.com/elci-group/scotia/issues
+    releaseNotesUrl:     https://github.com/elci-group/scotia/releases
+    donateUrl:           ""
+
+images:
+    productIcon:         "logo.png"
+    productLogo:         "logo.png"
+    productWelcome:      "logo.png"
+
+style:
+   SidebarBackground:        "#0b3d5c"
+   SidebarText:              "#e8f4f8"
+   SidebarTextCurrent:       "#0b3d5c"
+   SidebarBackgroundCurrent: "#8ecae6"
+
+slideshow: "show.qml"
+slideshowAPI: 2
+
+uploadServer:
+    type: "none"
+    url: ""
+    sizeLimit: -1

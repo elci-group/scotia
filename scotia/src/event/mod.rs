@@ -1,3 +1,14 @@
+//! Canonical Scotia event types.
+//!
+//! Split into focused submodules; everything is re-exported here so the public
+//! surface (`scotia::event::*`) is unchanged.
+
+mod builders;
+mod kind;
+
+pub use builders::ScotiaRun;
+pub use kind::{ActionStatus, AgentKind, ErrorKind, Role};
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -150,122 +161,5 @@ impl ScotiaEvent {
             ScotiaEvent::StateDelta { timestamp, .. } => *timestamp,
             ScotiaEvent::RunFinished { timestamp, .. } => *timestamp,
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentKind {
-    KimiCode,
-    Agy,
-    Cosine,
-    Codex,
-    ClaudeCode,
-    Opencode,
-    #[serde(other)]
-    Unknown,
-}
-
-impl AgentKind {
-    pub fn from_binary_name(name: &str) -> Self {
-        let lower = name.to_lowercase();
-        match lower.as_str() {
-            "kimi" | "kimi-code" | "kimi_code" => AgentKind::KimiCode,
-            "agy" => AgentKind::Agy,
-            "cosine" => AgentKind::Cosine,
-            "codex" | "codex-cli" | "codex_cli" => AgentKind::Codex,
-            "claude" | "claude-code" | "claude_code" => AgentKind::ClaudeCode,
-            "opencode" => AgentKind::Opencode,
-            _ => AgentKind::Unknown,
-        }
-    }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            AgentKind::KimiCode => "kimi-code",
-            AgentKind::Agy => "agy",
-            AgentKind::Cosine => "cosine",
-            AgentKind::Codex => "codex",
-            AgentKind::ClaudeCode => "claude-code",
-            AgentKind::Opencode => "opencode",
-            AgentKind::Unknown => "unknown",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Role {
-    User,
-    System,
-    Agent,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ActionStatus {
-    Success,
-    Failure,
-    Cancelled,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ErrorKind {
-    ToolError,
-    ModelError,
-    Timeout,
-    Retry,
-    Unknown,
-}
-
-/// A complete Scotia run, stored as a single artifact.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScotiaRun {
-    pub run_id: RunId,
-    pub agent: AgentKind,
-    pub task: Option<String>,
-    pub started_at: DateTime<Utc>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub finished_at: Option<DateTime<Utc>>,
-    pub events: Vec<ScotiaEvent>,
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
-}
-
-impl ScotiaRun {
-    pub fn new(agent: AgentKind, task: Option<String>, run_id: Option<Uuid>) -> Self {
-        let run_id = run_id.unwrap_or_else(Uuid::new_v4);
-        let started_at = Utc::now();
-        Self {
-            run_id,
-            agent,
-            task: task.clone(),
-            started_at,
-            finished_at: None,
-            events: vec![ScotiaEvent::RunStarted {
-                run_id,
-                agent,
-                task,
-                timestamp: started_at,
-                metadata: HashMap::new(),
-            }],
-            metadata: HashMap::new(),
-        }
-    }
-
-    pub fn push(&mut self, event: ScotiaEvent) {
-        self.events.push(event);
-    }
-
-    pub fn finish(&mut self, exit_code: Option<i32>, summary: Option<String>) {
-        let timestamp = Utc::now();
-        self.finished_at = Some(timestamp);
-        self.push(ScotiaEvent::RunFinished {
-            run_id: self.run_id,
-            timestamp,
-            exit_code,
-            summary,
-        });
     }
 }

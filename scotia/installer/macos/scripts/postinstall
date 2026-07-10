@@ -1,0 +1,68 @@
+#!/bin/bash
+# Finalize the Scotia install: copy binaries into place, then run the CLI
+# installer AS THE REAL (CONSOLE) USER to register per-user shims and the
+# LaunchAgent. This script runs as root during a .pkg install, so every
+# per-user action must be delegated to the logged-in user — never performed as
+# root against root's home directory.
+set -e
+
+TARGET="$1"  # target volume chosen in the installer
+
+# Resolve the real console user and their home directory.
+console_uid="$(/usr/bin/stat -f%u /dev/console 2>/dev/null || true)"
+CONSOLE_USER="$( [ -n "$console_uid" ] && id -un "$console_uid" 2>/dev/null || true )"
+CONSOLE_USER="${CONSOLE_USER:-${SUDO_USER:-$USER}}"
+REAL_HOME="$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}' || true)"
+REAL_HOME="${REAL_HOME:-/Users/$CONSOLE_USER}"
+
+if [ "$TARGET" = "/" ]; then
+    BIN_DIR="/usr/local/bin"
+else
+    BIN_DIR="$REAL_HOME/.local/bin"
+fi
+
+INSTALL_DIR="${TARGET}/usr/local/scotia"
+
+mkdir -p "$BIN_DIR"
+cp -f "${INSTALL_DIR}/bin/scotia"      "$BIN_DIR/scotia"
+cp -f "${INSTALL_DIR}/bin/scotiad"     "$BIN_DIR/scotiad"
+cp -f "${INSTALL_DIR}/bin/scotia-shim" "$BIN_DIR/scotia-shim"
+chmod +x "$BIN_DIR/scotia" "$BIN_DIR/scotiad" "$BIN_DIR/scotia-shim"
+# Ensure the console user owns the per-user bin dir contents.
+if [ "$BIN_DIR" = "$REAL_HOME/.local/bin" ]; then
+    chown -R "$CONSOLE_USER" "$BIN_DIR" 2>/dev/null || true
+fi
+
+# Prompt for autostart (dialog attached to the console user's session).
+AUTOSTART=$(sudo -u "$CONSOLE_USER" osascript <<'OSA' 2>/dev/null || true
+display dialog "Start the Scotia daemon automatically?" buttons {"No", "Yes"} default button "Yes" with icon note
+if button returned of result is "Yes" then
+    return "yes"
+else
+    return "no"
+end if
+OSA
+)
+
+# Prompt for PATH shims.
+SHIMS=$(sudo -u "$CONSOLE_USER" osascript <<'OSA' 2>/dev/null || true
+display dialog "Install PATH shims for agent commands (kimi, claude, codex, ...)?" buttons {"No", "Yes"} default button "Yes" with icon note
+if button returned of result is "Yes" then
+    return "yes"
+else
+    return "no"
+end if
+OSA
+)
+
+AUTOSTART_ARG=""
+SHIMS_ARG=""
+[ "$AUTOSTART" = "yes" ] && AUTOSTART_ARG="--autostart"
+[ "$SHIMS" = "yes" ]     && SHIMS_ARG="--install-shims"
+
+# Always install the daemon/shims for the real (console) user in user scope.
+# The daemon is a per-user process; it is never installed as a LaunchDaemon.
+sudo -u "$CONSOLE_USER" "${BIN_DIR}/scotia" installer apply \
+    --scope user ${AUTOSTART_ARG} ${SHIMS_ARG} --bin-dir "$BIN_DIR"
+
+exit 0

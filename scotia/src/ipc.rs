@@ -4,36 +4,53 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use uuid::Uuid;
 
+/// Base directory for Scotia runtime state (socket, pid, log).
+///
+/// Preference order: per-user runtime dir (`$XDG_RUNTIME_DIR`, typically
+/// `/run/user/<uid>` and mode 0700), then the per-user state dir, then the
+/// per-user data dir, and finally the process temp directory. A dedicated
+/// `scotia` subdirectory is always used so the daemon can lock it down to
+/// mode 0700 and the socket to 0600. We deliberately never place the control
+/// socket directly in a world-writable directory such as `/tmp`.
+pub fn scotia_base_dir() -> PathBuf {
+    dirs::runtime_dir()
+        .or_else(dirs::state_dir)
+        .or_else(dirs::data_dir)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("scotia")
+}
+
 /// Unix socket path for the Scotia daemon.
 pub fn default_socket_path() -> PathBuf {
-    dirs::runtime_dir()
-        .or_else(dirs::data_dir)
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("scotiad.sock")
+    scotia_base_dir().join("scotiad.sock")
 }
 
 /// PID file path for the Scotia daemon.
 pub fn default_pid_file() -> PathBuf {
-    dirs::state_dir()
-        .or_else(dirs::data_dir)
-        .unwrap_or_else(|| PathBuf::from("~/.local/share"))
-        .join("scotia")
-        .join("scotiad.pid")
+    scotia_base_dir().join("scotiad.pid")
 }
 
 /// Log file path for the Scotia daemon.
 pub fn default_log_file() -> PathBuf {
-    dirs::state_dir()
-        .or_else(dirs::data_dir)
-        .unwrap_or_else(|| PathBuf::from("~/.local/share"))
-        .join("scotia")
-        .join("scotiad.log")
+    scotia_base_dir().join("scotiad.log")
+}
+
+/// Path of the optional IPC handshake token (written mode 0600 next to the
+/// socket). Only the same user can read it, so presenting it proves the peer
+/// shares the daemon's uid.
+pub fn default_token_path() -> PathBuf {
+    scotia_base_dir().join("token")
 }
 
 /// A request sent from a client (shim or CLI) to `scotiad`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum DaemonRequest {
+    /// Prove the peer may use this daemon by presenting the handshake token.
+    /// Only required when the daemon is started with `--require-token`.
+    Auth {
+        token: String,
+    },
     Ping,
     RegisterRun {
         run_id: Uuid,

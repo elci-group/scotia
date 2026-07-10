@@ -1,0 +1,8 @@
+#!/bin/bash
+# Stop any running Scotia daemon before upgrading/uninstalling.
+set -e
+
+launchctl unload ~/Library/LaunchAgents/com.scotia.scotiad.plist 2>/dev/null || true
+launchctl unload /Library/LaunchDaemons/com.scotia.scotiad.plist 2>/dev/null || true
+
+exit 0

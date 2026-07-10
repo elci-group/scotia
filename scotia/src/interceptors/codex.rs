@@ -1,7 +1,8 @@
 use super::*;
-use crate::event::{ErrorKind, ScotiaEvent};
+use crate::event::ScotiaEvent;
 use crate::interceptor::{AgentInterceptor, InterceptorContext, StreamSource};
 use regex::Regex;
+use std::sync::OnceLock;
 
 /// Interceptor for the OpenAI `codex` CLI agent.
 ///
@@ -47,27 +48,14 @@ impl AgentInterceptor for CodexInterceptor {
         let trimmed = line.trim();
 
         // Flush any in-progress diff block if the current line breaks it.
-        if let Some((path, buf)) = self.diff_buffer.as_mut() {
-            let is_diff_line = trimmed.starts_with("---")
-                || trimmed.starts_with("+++")
-                || trimmed.starts_with("@@")
-                || trimmed.starts_with('+')
-                || trimmed.starts_with('-')
-                || trimmed.starts_with(' ');
-
-            if !is_diff_line && !buf.is_empty() {
-                events.push(emit_state_delta(
-                    ctx,
-                    Some(path.clone()),
-                    Some(buf.clone()),
-                    None,
-                ));
-                self.diff_buffer = None;
-            }
+        if let Some(event) = take_diff_if_broken(&mut self.diff_buffer, is_diff_line(trimmed), ctx)
+        {
+            events.push(event);
         }
 
         // Bracketed tool invocations: [bash] cargo test, [read] src/main.rs
-        if let Some(cap) = Regex::new(r"^\[(\w+)\]\s*(.+)$").unwrap().captures(trimmed) {
+        static RE_BRACKET: OnceLock<Regex> = OnceLock::new();
+        if let Some(cap) = cached_regex(&RE_BRACKET, r"^\[(\w+)\]\s*(.+)$").captures(trimmed) {
             let tool = cap[1].to_lowercase();
             let target = cap[2].to_string();
 
@@ -108,9 +96,9 @@ impl AgentInterceptor for CodexInterceptor {
 
         // Plain-text action annotation: "bash: cargo test" or "▸ read: src/main.rs".
         // Skip routing keywords so "model: groq" is captured as ModelRouted instead.
-        if let Some(cap) = Regex::new(r"(?i)(?:[▸●›>\-]\s*)?(\w+)\s*[:：]\s*(.+)$")
-            .unwrap()
-            .captures(trimmed)
+        static RE_ACTION: OnceLock<Regex> = OnceLock::new();
+        if let Some(cap) =
+            cached_regex(&RE_ACTION, r"(?i)(?:[▸●›>\-]\s*)?(\w+)\s*[:：]\s*(.+)$").captures(trimmed)
         {
             let tool = cap[1].to_lowercase();
             if !matches!(
@@ -129,11 +117,9 @@ impl AgentInterceptor for CodexInterceptor {
         }
 
         // Model routing decision: groq, ollama, openai, local, etc.
-        if let Some(cap) = Regex::new(
-            r"(?i)(?:model|routing|router)\s*[:：]\s*([a-z0-9_\.-]+)$|\b(?:using|routed to)\s+([a-z0-9_\.-]+)",
-        )
-        .unwrap()
-        .captures(trimmed)
+        static RE_MODEL: OnceLock<Regex> = OnceLock::new();
+        if let Some(cap) = cached_regex(&RE_MODEL, r"(?i)(?:model|routing|router)\s*[:：]\s*([a-z0-9_\.-]+)$|\b(?:using|routed to)\s+([a-z0-9_\.-]+)")
+            .captures(trimmed)
         {
             let model = cap
                 .get(1)
@@ -148,34 +134,14 @@ impl AgentInterceptor for CodexInterceptor {
 
         // Error / retry signals.
         let lower = trimmed.to_lowercase();
-        if lower.contains("retrying")
-            || lower.contains("try again")
-            || lower.starts_with("error:")
-            || lower.starts_with("failed:")
-        {
-            let kind = if lower.contains("retrying") || lower.contains("try again") {
-                ErrorKind::Retry
-            } else {
-                ErrorKind::Unknown
-            };
+        if let Some(kind) = classify_error(&lower) {
             events.push(emit_error_or_retry(ctx, kind, trimmed.to_string(), None));
             return events;
         }
 
         // Accumulate unified-diff blocks after an edit/write.
-        if let Some((_path, buf)) = self.diff_buffer.as_mut() {
-            let is_diff_line = trimmed.starts_with("---")
-                || trimmed.starts_with("+++")
-                || trimmed.starts_with("@@")
-                || trimmed.starts_with('+')
-                || trimmed.starts_with('-')
-                || trimmed.starts_with(' ');
-
-            if is_diff_line {
-                buf.push_str(line);
-                buf.push('\n');
-                return events;
-            }
+        if accumulate_diff(&mut self.diff_buffer, line, is_diff_line(trimmed)) {
+            return events;
         }
 
         // Anything else is a response chunk.

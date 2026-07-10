@@ -39,6 +39,18 @@ pub struct ServiceResult {
     pub output: String,
 }
 
+/// Fallback for the per-user config dir when `dirs::config_dir()` is unavailable.
+fn fallback_config_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join(".config")
+}
+
+/// Fallback for the home directory when `dirs::home_dir()` is unavailable.
+fn fallback_home() -> PathBuf {
+    std::env::temp_dir()
+}
+
 /// Install the daemon as a user service.
 pub fn install_service() -> Result<ServiceResult> {
     let platform = ServicePlatform::detect();
@@ -64,7 +76,7 @@ pub fn uninstall_service() -> Result<ServiceResult> {
 fn install_systemd() -> Result<ServiceResult> {
     let source = bundled_service_file("scotiad.service")?;
     let user_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.config"))
+        .unwrap_or_else(fallback_config_dir)
         .join("systemd")
         .join("user");
     fs::create_dir_all(&user_dir)?;
@@ -96,7 +108,7 @@ fn install_systemd() -> Result<ServiceResult> {
 
 fn uninstall_systemd() -> Result<ServiceResult> {
     let dest = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.config"))
+        .unwrap_or_else(fallback_config_dir)
         .join("systemd/user/scotiad.service");
 
     let mut output = String::new();
@@ -126,7 +138,7 @@ fn uninstall_systemd() -> Result<ServiceResult> {
 fn install_launchd() -> Result<ServiceResult> {
     let source = bundled_service_file("com.scotia.scotiad.plist")?;
     let agents_dir = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("~"))
+        .unwrap_or_else(fallback_home)
         .join("Library/LaunchAgents");
     fs::create_dir_all(&agents_dir)?;
     let dest = agents_dir.join("com.scotia.scotiad.plist");
@@ -146,7 +158,7 @@ fn install_launchd() -> Result<ServiceResult> {
 
 fn uninstall_launchd() -> Result<ServiceResult> {
     let dest = dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("~"))
+        .unwrap_or_else(fallback_home)
         .join("Library/LaunchAgents/com.scotia.scotiad.plist");
 
     let mut output = String::new();
@@ -188,7 +200,7 @@ fn bundled_service_file(name: &str) -> Result<PathBuf> {
 fn expand_service_template(text: &str) -> String {
     let home = dirs::home_dir()
         .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| "~".to_string());
+        .unwrap_or_else(|| std::env::temp_dir().to_string_lossy().to_string());
     let exe = std::env::current_exe()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| "scotiad".to_string());

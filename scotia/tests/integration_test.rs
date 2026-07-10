@@ -1,24 +1,25 @@
-use scotia::adapter::{AdapterContext, AgentAdapter, StreamSource, build_adapter};
 use scotia::event::{AgentKind, ScotiaEvent};
+use scotia::interceptor::{AgentInterceptor, InterceptorContext, StreamSource, build_interceptor};
 use scotia::normalizer::normalize;
 use scotia::storage::{StorageConfig, store_run};
 use scotia::synthesizer::synthesize;
 use scotia::wrapper::{WrapperConfig, run_and_capture};
 use tempfile::TempDir;
 
-fn ctx(agent: AgentKind) -> AdapterContext {
-    AdapterContext {
+fn ctx(agent: AgentKind) -> InterceptorContext {
+    InterceptorContext {
         run_id: uuid::Uuid::new_v4(),
         agent,
+        hints: std::collections::HashMap::new(),
     }
 }
 
 #[test]
-fn test_claude_adapter_parses_tool_invocations() {
+fn test_claude_interceptor_parses_tool_invocations() {
     let ctx = ctx(AgentKind::ClaudeCode);
-    let mut adapter = build_adapter(AgentKind::ClaudeCode);
+    let mut interceptor = build_interceptor(AgentKind::ClaudeCode);
 
-    let events = adapter.parse_line(&ctx, StreamSource::Stdout, "› Read: src/main.rs");
+    let events = interceptor.parse_line(&ctx, StreamSource::Stdout, "› Read: src/main.rs");
     assert_eq!(events.len(), 1);
     let ScotiaEvent::ActionInvoked { tool, target, .. } = &events[0] else {
         panic!("expected ActionInvoked");
@@ -28,11 +29,11 @@ fn test_claude_adapter_parses_tool_invocations() {
 }
 
 #[test]
-fn test_codex_adapter_parses_bracketed_tool() {
+fn test_codex_interceptor_parses_bracketed_tool() {
     let ctx = ctx(AgentKind::Codex);
-    let mut adapter = build_adapter(AgentKind::Codex);
+    let mut interceptor = build_interceptor(AgentKind::Codex);
 
-    let events = adapter.parse_line(&ctx, StreamSource::Stdout, "[bash] cargo test");
+    let events = interceptor.parse_line(&ctx, StreamSource::Stdout, "[bash] cargo test");
     assert_eq!(events.len(), 1);
     let ScotiaEvent::ActionInvoked { tool, target, .. } = &events[0] else {
         panic!("expected ActionInvoked");
@@ -42,11 +43,11 @@ fn test_codex_adapter_parses_bracketed_tool() {
 }
 
 #[test]
-fn test_kimi_adapter_parses_bullet_tool() {
+fn test_kimi_interceptor_parses_bullet_tool() {
     let ctx = ctx(AgentKind::KimiCode);
-    let mut adapter = build_adapter(AgentKind::KimiCode);
+    let mut interceptor = build_interceptor(AgentKind::KimiCode);
 
-    let events = adapter.parse_line(&ctx, StreamSource::Stdout, "▸ file_read: src/lib.rs");
+    let events = interceptor.parse_line(&ctx, StreamSource::Stdout, "▸ file_read: src/lib.rs");
     assert_eq!(events.len(), 1);
     let ScotiaEvent::ActionInvoked { tool, target, .. } = &events[0] else {
         panic!("expected ActionInvoked");
@@ -56,11 +57,11 @@ fn test_kimi_adapter_parses_bullet_tool() {
 }
 
 #[test]
-fn test_agy_adapter_parses_json_tool() {
+fn test_agy_interceptor_parses_json_tool() {
     let ctx = ctx(AgentKind::Agy);
-    let mut adapter = build_adapter(AgentKind::Agy);
+    let mut interceptor = build_interceptor(AgentKind::Agy);
 
-    let events = adapter.parse_line(
+    let events = interceptor.parse_line(
         &ctx,
         StreamSource::Stdout,
         r#"{"tool":"grep","target":"src","arguments":{"pattern":"fn main"}}"#,
@@ -81,11 +82,11 @@ fn test_agy_adapter_parses_json_tool() {
 }
 
 #[test]
-fn test_cosine_adapter_parses_action_line() {
+fn test_cosine_interceptor_parses_action_line() {
     let ctx = ctx(AgentKind::Cosine);
-    let mut adapter = build_adapter(AgentKind::Cosine);
+    let mut interceptor = build_interceptor(AgentKind::Cosine);
 
-    let events = adapter.parse_line(
+    let events = interceptor.parse_line(
         &ctx,
         StreamSource::Stdout,
         "ACTION read_file path=src/main.rs",
@@ -99,11 +100,12 @@ fn test_cosine_adapter_parses_action_line() {
 }
 
 #[test]
-fn test_opencode_adapter_parses_tool_line() {
+fn test_opencode_interceptor_parses_tool_line() {
     let ctx = ctx(AgentKind::Opencode);
-    let mut adapter = build_adapter(AgentKind::Opencode);
+    let mut interceptor = build_interceptor(AgentKind::Opencode);
 
-    let events = adapter.parse_line(&ctx, StreamSource::Stdout, "[TOOL] read_file: src/main.rs");
+    let events =
+        interceptor.parse_line(&ctx, StreamSource::Stdout, "[TOOL] read_file: src/main.rs");
     assert_eq!(events.len(), 1);
     let ScotiaEvent::ActionInvoked { tool, target, .. } = &events[0] else {
         panic!("expected ActionInvoked");

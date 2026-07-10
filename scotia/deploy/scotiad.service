@@ -1,12 +1,29 @@
 [Unit]
 Description=Scotia daemon — session registry and notification hub
-After=network.target
+After=default.target
 
 [Service]
 Type=simple
 ExecStart=%h/.cargo/bin/scotiad
 Restart=on-failure
 RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=full
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX
+# Drop every Linux capability — the daemon is an unprivileged per-user process
+# and needs none.
+CapabilityBoundingSet=
+# Allow only the syscalls a typical service needs (event loop, sockets, timers).
+# Requires systemd 248+ (the @system-service set landed in 248).
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=default.target

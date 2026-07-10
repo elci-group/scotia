@@ -18,8 +18,39 @@ Git-native audit log with post-hoc synthesis.
 
 ## Installation
 
+### From source
+
 ```bash
 cargo build --release
+```
+
+The build produces three binaries in `target/release/`:
+- `scotia` — CLI and TUI
+- `scotiad` — daemon
+- `scotia-shim` — agent wrapper shim
+
+### GUI installers
+
+Pre-built GUI installers are provided under `installer/`:
+
+- **Linux** — Calamares module in `installer/linux/calamares/`. Copy or package the
+  `calamares` directory, build the `scotia_ui` QML view module (see
+  `installer/linux/calamares/modules/scotia_ui/CMakeLists.txt`), and run
+  `calamares -d /path/to/calamares`. The installer lets you pick per-user or
+  system-wide scope, autostart, and PATH shims.
+- **Windows** — NSIS script in `installer/windows/scotia.nsi`. Copy the release
+  binaries to `installer/windows/bin/` and run `makensis scotia.nsi` to produce
+  `Scotia-Setup.exe`.
+- **macOS** — `installer/macos/build-pkg.sh` builds a signed/unsigned `.pkg` and
+  wraps it in a `.dmg`. Run it from the repository root after building the
+  release binaries.
+
+### Scripted install
+
+GUI installers call the same underlying command:
+
+```bash
+scotia installer apply --scope user|system --autostart --install-shims --bin-dir /path/to/bin
 ```
 
 ## Usage

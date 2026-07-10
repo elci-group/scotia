@@ -1,0 +1,116 @@
+name: Installer verification
+
+# Headless, structural validation of the per-platform installers. These jobs
+# prove the installers parse, expose the expected safety controls, and fail
+# closed — they do not perform full end-to-end installs (that needs signing
+# keys, Apple tooling, and a Windows NSIS toolchain). See
+# docs/installer-verification.md for the manual runbook that covers the rest.
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'scotia.tech/downloads/install-scotia.sh'
+      - 'installer/**'
+      - '.github/workflows/installers.yml'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'scotia.tech/downloads/install-scotia.sh'
+      - 'installer/**'
+      - '.github/workflows/installers.yml'
+
+jobs:
+  linux:
+    name: Linux shell installer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check
+        run: bash -n scotia.tech/downloads/install-scotia.sh
+
+      - name: Help renders
+        run: bash scotia.tech/downloads/install-scotia.sh --help
+
+      - name: Required safety controls are present
+        run: |
+          set -euo pipefail
+          s=scotia.tech/downloads/install-scotia.sh
+          grep -q -- '--insecure-allow-unsigned' "$s"
+          grep -q 'MINISIGN_PUBKEY=' "$s"
+          grep -q 'minisign -Vm' "$s"
+          grep -q 'Refusing to install an unauthenticated binary' "$s"
+          grep -q -- '--proto .=https' "$s"
+          echo "all required controls present"
+
+      - name: Fails closed with no reachable manifest
+        run: |
+          set -uo pipefail
+          tmp="$(mktemp -d)"
+          # Point at an unreachable base URL and forbid the unsigned escape:
+          # the installer must abort non-zero rather than install anything.
+          if SCOTIA_BASE_URL="file:///no/such/path" \
+             INSTALL_DIR="$tmp/bin" \
+             bash scotia.tech/downloads/install-scotia.sh >/dev/null 2>&1; then
+            echo "FAIL: installer succeeded against an unreachable base URL" >&2
+            exit 1
+          fi
+          echo "installer correctly aborted with no reachable manifest"
+
+  macos:
+    name: macOS pkg builder
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check
+        run: bash -n installer/macos/build-pkg.sh
+
+      - name: Required packaging steps are present
+        run: |
+          set -euo pipefail
+          s=installer/macos/build-pkg.sh
+          grep -q 'pkgbuild' "$s"
+          grep -q 'productbuild' "$s"
+          grep -q 'com.scotia.scotia' "$s"
+          grep -q 'scotia-shim' "$s"
+          echo "macOS packaging steps present"
+
+  windows:
+    name: Windows NSIS installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer script present
+        shell: pwsh
+        run: |
+          if (-not (Test-Path installer/windows/scotia.nsi)) { throw "scotia.nsi missing" }
+
+      - name: Per-user default and scope controls present
+        shell: pwsh
+        run: |
+          $n = Get-Content installer/windows/scotia.nsi -Raw
+          foreach ($needle in @(
+            'RequestExecutionLevel user',
+            'InstallDir "$LOCALAPPDATA\Scotia"',
+            'ScopeRadioUser',
+            'ScopeRadioSystem'
+          )) {
+            if (-not $n.Contains($needle)) { throw "missing: $needle" }
+          }
+          Write-Host "NSIS per-user default and scope controls present"
+
+      - name: Best-effort NSIS compile (when makensis is available)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $makensis = Get-Command makensis -ErrorAction SilentlyContinue
+          if ($null -eq $makensis) {
+            Write-Host "makensis not on PATH; skipping compile (install NSIS to enable)."
+            return
+          }
+          Push-Location installer/windows
+          makensis scotia.nsi
+          Pop-Location

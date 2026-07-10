@@ -1,10 +1,9 @@
-pub mod adapter;
-pub mod adapters;
 pub mod algebra;
 pub mod cli;
 pub mod daemon;
 pub mod event;
 pub mod git;
+pub mod installer;
 pub mod interceptor;
 pub mod interceptors;
 pub mod ipc;

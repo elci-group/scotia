@@ -1,0 +1,83 @@
+name: Release signing
+
+# Builds the published Linux x86_64 asset, produces SHA256SUMS, and signs the
+# manifest with minisign. The minisign PUBLIC key paired with MINISIGN_SECRET_KEY
+# must be the value pinned as MINISIGN_PUBKEY in
+# scotia.tech/downloads/install-scotia.sh — otherwise installer verification
+# will (correctly) reject the manifest.
+#
+# Required repository secret:
+#   MINISIGN_SECRET_KEY  contents of the minisign secret key file
+#                        (generate with: minisign -G -p minisign.pub -s minisign.key)
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+  ASSET: scotia-linux-x64
+  CHECKSUM_FILE: SHA256SUMS
+
+permissions:
+  contents: write
+
+jobs:
+  sign:
+    name: Build, checksum, sign
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binaries
+        run: cargo build --release --bins
+
+      - name: Stage asset
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp target/release/scotia "dist/$ASSET"
+          (cd dist && sha256sum "$ASSET" > "$CHECKSUM_FILE")
+
+      - name: Install minisign
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y minisign
+
+      - name: Sign manifest
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MINISIGN_SECRET_KEY:-}" ]]; then
+            echo "MINISIGN_SECRET_KEY is not set; cannot sign release." >&2
+            exit 1
+          fi
+          keyfile="$(mktemp)"
+          chmod 600 "$keyfile"
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$keyfile"
+          (cd dist && minisign -S -s "$keyfile" -m "$CHECKSUM_FILE" -x "${CHECKSUM_FILE}.minisig")
+          rm -f "$keyfile"
+          echo "Signed manifest:"
+          cat "dist/${CHECKSUM_FILE}.minisig"
+
+      - name: Upload release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "${GITHUB_REF_NAME}" \
+            "dist/$ASSET" \
+            "dist/$CHECKSUM_FILE" \
+            "dist/${CHECKSUM_FILE}.minisig" \
+            --clobber

@@ -1,0 +1,31 @@
+name: Fuzz smoke
+
+# Short libFuzzer smoke run (NOT a 24h campaign): proves the fuzz targets in
+# fuzz/ still build under nightly and survive a small batch of inputs without
+# panicking. Runs weekly and on demand; does not gate PRs. The targets are
+# type-checked on stable by `cargo check --manifest-path fuzz/Cargo.toml`.
+
+on:
+  schedule:
+    - cron: '23 4 * * 2'  # Tue 04:23, off the round-minute herd
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [fuzz_daemon_request, fuzz_interceptors]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Run ${{ matrix.target }}
+        run: cargo fuzz run ${{ matrix.target }} -- -runs=10000 -max_total_time=60

@@ -1,0 +1,8 @@
+---
+name:       scotia
+type:       job
+interface:  python
+script:     main.py
+description: "Install Scotia and register the daemon for autostart."
+noconfig:   false
+weight:     5

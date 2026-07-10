@@ -5,6 +5,11 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use std::path::{Path, PathBuf};
 
+/// Maximum size of a run JSON file that `load_run` will read into memory.
+/// 64 MiB is vastly larger than any legitimate run and bounds the cost of
+/// deserialising a user-supplied path (`replay` / `summary` / `validate` / ...).
+const MAX_RUN_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
 /// Configuration for the Scotia log store.
 #[derive(Debug, Clone)]
 pub struct StorageConfig {
@@ -92,6 +97,18 @@ pub async fn store_run(config: &StorageConfig, run: ScotiaRun) -> Result<StoredR
 
 /// Load a run back from disk.
 pub async fn load_run(path: &Path) -> Result<ScotiaRun> {
+    let meta = tokio::fs::metadata(path)
+        .await
+        .with_context(|| format!("failed to stat {}", path.display()))?;
+    if meta.len() > MAX_RUN_FILE_BYTES {
+        anyhow::bail!(
+            "run file {} is {} bytes, exceeding the {} byte limit",
+            path.display(),
+            meta.len(),
+            MAX_RUN_FILE_BYTES
+        );
+    }
+
     let content = tokio::fs::read_to_string(path)
         .await
         .with_context(|| format!("failed to read {}", path.display()))?;

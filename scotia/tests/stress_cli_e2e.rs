@@ -410,6 +410,41 @@ fn missing_agent_binary_fails_cleanly() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn unsafe_agent_binary_is_rejected() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // An existing but group/other-writable agent binary must be refused before
+    // exec, even though it is executable — a world-writable impostor on PATH
+    // (or an explicit --agent-path) must never run.
+    let (_dir, root) = temp_log_root();
+    let tmp = TempDir::new().unwrap();
+    let evil = tmp.path().join("evil_agent");
+    fs::write(&evil, "#!/bin/sh\necho pwned\n").unwrap();
+    fs::set_permissions(&evil, fs::Permissions::from_mode(0o777)).unwrap();
+
+    let out = scotia([
+        "--log-root",
+        &root.to_string_lossy(),
+        "run",
+        "--agent",
+        "generic",
+        "--task",
+        "unsafe binary",
+        "--",
+        &evil.to_string_lossy(),
+    ]);
+
+    assert!(!out.status.success(), "expected refusal for unsafe binary");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("is not a safe executable"),
+        "expected safety rejection, got: {}",
+        stderr
+    );
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(16))]
 

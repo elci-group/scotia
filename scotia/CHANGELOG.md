@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Cross-platform GUI installers: Calamares module for Linux, NSIS installer for Windows, and pkg/DMG installer for macOS, each with per-user or system-wide autostart options.
+- `scotia installer apply` command for scripted installs from GUI installers.
+- Windows service and HKCU Run registration in the shared installer module.
+- Calamares QML view module (`scotia_ui`) plus Python job module (`scotia`) for Linux.
 - `scotiad` daemon for session registry and themed notification dispatch.
 - Unix-domain-socket IPC between CLI and daemon.
 - `scotia-shim` binary and `scotia install-shims` / `uninstall-shims` commands for zero-friction agent wrapping.

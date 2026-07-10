@@ -164,3 +164,81 @@ pub fn classify_stderr(ctx: &InterceptorContext, line: &str) -> Option<ScotiaEve
     }
     Some(emit_error_or_retry(ctx, ErrorKind::Unknown, trimmed, None))
 }
+
+/// Returns true when `s` looks like a line belonging to a unified diff block.
+/// Callers decide whether to test the raw line or a trimmed copy.
+pub fn is_diff_line(s: &str) -> bool {
+    s.starts_with("---")
+        || s.starts_with("+++")
+        || s.starts_with("@@")
+        || s.starts_with('+')
+        || s.starts_with('-')
+        || s.starts_with(' ')
+}
+
+/// Classify an error/retry signal from a lowercased, trimmed line.
+pub fn classify_error(lower: &str) -> Option<ErrorKind> {
+    if lower.contains("retrying")
+        || lower.contains("try again")
+        || lower.starts_with("error:")
+        || lower.starts_with("failed:")
+    {
+        Some(
+            if lower.contains("retrying") || lower.contains("try again") {
+                ErrorKind::Retry
+            } else {
+                ErrorKind::Unknown
+            },
+        )
+    } else {
+        None
+    }
+}
+
+/// If a unified-diff block is in flight and the current line breaks it, emit the
+/// accumulated state delta and clear the buffer. Returns the event to push, if any.
+pub fn take_diff_if_broken(
+    diff_buffer: &mut Option<(String, String)>,
+    current_is_diff: bool,
+    ctx: &InterceptorContext,
+) -> Option<ScotiaEvent> {
+    let (path, buf) = diff_buffer.as_mut()?;
+    if !current_is_diff && !buf.is_empty() {
+        let event = emit_state_delta(ctx, Some(path.clone()), Some(buf.clone()), None);
+        *diff_buffer = None;
+        Some(event)
+    } else {
+        None
+    }
+}
+
+/// Append `line` to the in-flight diff buffer when it is a diff line. Returns
+/// true if the line was consumed so callers can short-circuit.
+pub fn accumulate_diff(
+    diff_buffer: &mut Option<(String, String)>,
+    line: &str,
+    current_is_diff: bool,
+) -> bool {
+    let Some((_path, buf)) = diff_buffer.as_mut() else {
+        return false;
+    };
+    if current_is_diff {
+        buf.push_str(line);
+        buf.push('\n');
+        true
+    } else {
+        false
+    }
+}
+
+/// Return a process-wide cached, compiled regex. Each call site declares its
+/// own `static RE: OnceLock<Regex> = OnceLock::new();` and passes it here, so a
+/// pattern is compiled at most once instead of on every parsed line.
+pub fn cached_regex(
+    slot: &'static std::sync::OnceLock<regex::Regex>,
+    pattern: &'static str,
+) -> &'static regex::Regex {
+    slot.get_or_init(|| {
+        regex::Regex::new(pattern).expect("interceptor regex pattern must be valid")
+    })
+}
