@@ -1,6 +1,6 @@
 [package]
 name = "scotia"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 description = "Semantic Decision Ledger for agentic systems"
 authors = ["Scotia Contributors"]
@@ -31,7 +31,7 @@ path = "src/bin/scotia-shim.rs"
 
 [[bin]]
 name = "scotiad"
-path = "src/bin/scotiad.rs"
+path = "src/bin/scotiad/main.rs"
 
 [features]
 default = ["notify"]

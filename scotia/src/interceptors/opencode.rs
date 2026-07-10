@@ -7,6 +7,16 @@ use crate::interceptors::{
 use regex::Regex;
 use std::sync::OnceLock;
 
+// Line-classification grammar. Hoisted to module scope so `parse_line` reads as
+// the matching sequence rather than interleaving pattern declarations.
+static RE_RETRY: OnceLock<Regex> = OnceLock::new();
+static RE_ERROR: OnceLock<Regex> = OnceLock::new();
+static RE_ROUTING: OnceLock<Regex> = OnceLock::new();
+static RE_MODEL2: OnceLock<Regex> = OnceLock::new();
+static RE_TOOL: OnceLock<Regex> = OnceLock::new();
+static RE_STATUS: OnceLock<Regex> = OnceLock::new();
+static RE_EXIT: OnceLock<Regex> = OnceLock::new();
+
 /// Parser for opencode agent telemetry.
 ///
 /// opencode surfaces tool calls, routing decisions, edits and errors through
@@ -82,7 +92,6 @@ impl AgentInterceptor for OpencodeInterceptor {
         }
 
         // Explicit retry markers: "[RETRY] [2] connection timed out".
-        static RE_RETRY: OnceLock<Regex> = OnceLock::new();
         if let Some(cap) =
             cached_regex(&RE_RETRY, r"(?i)^\[RETRY\](?:\s*\[(\d+)\])?\s*(.+)$").captures(trimmed)
         {
@@ -97,7 +106,6 @@ impl AgentInterceptor for OpencodeInterceptor {
         }
 
         // Explicit error markers.
-        static RE_ERROR: OnceLock<Regex> = OnceLock::new();
         if let Some(cap) = cached_regex(&RE_ERROR, r"(?i)^\[ERROR\]\s*(.+)$").captures(trimmed) {
             events.push(emit_error_or_retry(
                 ctx,
@@ -116,7 +124,6 @@ impl AgentInterceptor for OpencodeInterceptor {
         //   model: ollama
         //   Routing to openai
         //   Using model: local
-        static RE_ROUTING: OnceLock<Regex> = OnceLock::new();
         if let Some(cap) = cached_regex(
             &RE_ROUTING,
             r"(?i)^(?:\[MODEL\]\s*)?(\w+)\s*(?:[:=]|->)\s*([a-z0-9_-]+)$",
@@ -142,7 +149,6 @@ impl AgentInterceptor for OpencodeInterceptor {
             }
         }
 
-        static RE_MODEL2: OnceLock<Regex> = OnceLock::new();
         if let Some(cap) = cached_regex(
             &RE_MODEL2,
             r"(?i)(?:using model|routed to|routing to|model|routing)\s*(?:[:=])?\s+([a-z0-9_-]+)",
@@ -159,7 +165,6 @@ impl AgentInterceptor for OpencodeInterceptor {
         //   [TOOL] read_file: src/main.rs
         //   [ACTION] bash: cargo test
         //   ▸ grep: pattern src/
-        static RE_TOOL: OnceLock<Regex> = OnceLock::new();
         if let Some(cap) = cached_regex(
             &RE_TOOL,
             r"(?i)^(?:\[TOOL\]|\[ACTION\]|[▸●›>])\s*(\w+)\s*[:：]\s*(.+)$",
@@ -179,8 +184,6 @@ impl AgentInterceptor for OpencodeInterceptor {
 
         // Action results: "[RESULT] status: success exit_code: 0".
         if trimmed.to_uppercase().starts_with("[RESULT]") {
-            static RE_STATUS: OnceLock<Regex> = OnceLock::new();
-            static RE_EXIT: OnceLock<Regex> = OnceLock::new();
             let status = cached_regex(&RE_STATUS, r"(?i)status\s*[:=]\s*(\w+)")
                 .captures(trimmed)
                 .and_then(|c| parse_action_status(&c[1]));
