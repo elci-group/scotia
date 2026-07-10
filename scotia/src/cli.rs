@@ -1,15 +1,12 @@
 mod daemon;
 mod doctor;
+mod query;
 mod run;
+mod shims;
 
-use crate::algebra::{diff_runs, regression_suite, render_regression_suite, validate};
 use crate::event::AgentKind;
 use crate::notify::{Notifier, default_notifier};
-use crate::shim::{
-    DEFAULT_AGENT_NAMES, default_shim_dir, detect_aliases, find_scotia_shim_binary, install_shims,
-    remove_shell_path, uninstall_shims, update_shell_path,
-};
-use crate::storage::{StorageConfig, list_runs, load_run};
+use crate::storage::StorageConfig;
 use crate::tui::run_tui;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -227,109 +224,28 @@ pub async fn main() -> Result<()> {
             .await?;
         }
         Some(Commands::Replay { path }) => {
-            let run = load_run(&path).await?;
-            for event in run.events {
-                println!("{}", serde_json::to_string(&event)?);
-            }
+            query::replay(&path).await?;
         }
         Some(Commands::Summary { path }) => {
-            let run = load_run(&path).await?;
-            let synthesis = crate::synthesizer::synthesize(&run);
-            println!("{}", synthesis.summary);
-            if !synthesis.decision_rationales.is_empty() {
-                println!("\n## Decision Rationales");
-                for r in &synthesis.decision_rationales {
-                    println!("- {}", r);
-                }
-            }
-            if !synthesis.trade_offs.is_empty() {
-                println!("\n## Trade-offs");
-                for t in &synthesis.trade_offs {
-                    println!("- {}", t);
-                }
-            }
+            query::summary(&path).await?;
         }
         Some(Commands::List) => {
-            let runs = list_runs(&storage_config.root).await?;
-            if runs.is_empty() {
-                println!(
-                    "No Scotia runs found under {}",
-                    storage_config.root.display()
-                );
-            } else {
-                for run in runs {
-                    println!("{}", run.display());
-                }
-            }
+            query::list(&storage_config).await?;
         }
         Some(Commands::Validate { path }) => {
-            let run = load_run(&path).await?;
-            let issues = validate(&run);
-            if issues.is_empty() {
-                println!("Run {} is structurally valid.", run.run_id);
-            } else {
-                println!(
-                    "Run {} has {} validation issue(s):",
-                    run.run_id,
-                    issues.len()
-                );
-                for issue in issues {
-                    println!("  - {:?}", issue);
-                }
-            }
+            query::validate_run(&path).await?;
         }
         Some(Commands::Diff { left, right }) => {
-            let left_run = load_run(&left).await?;
-            let right_run = load_run(&right).await?;
-            let diff = diff_runs(&left_run, &right_run);
-            println!("Actions added:    {:?}", diff.actions_added);
-            println!("Actions removed:  {:?}", diff.actions_removed);
-            println!("Models added:     {:?}", diff.models_added);
-            println!("Models removed:   {:?}", diff.models_removed);
-            println!("Errors added:     {}", diff.errors_added);
-            println!("Errors removed:   {}", diff.errors_removed);
+            query::diff(&left, &right).await?;
         }
         Some(Commands::Regression { path }) => {
-            let run = load_run(&path).await?;
-            let suite = regression_suite(&run);
-            println!("{}", render_regression_suite(&suite));
+            query::regression(&path).await?;
         }
         Some(Commands::InstallShims { shim_dir }) => {
-            let shim_dir = shim_dir.unwrap_or_else(default_shim_dir);
-            let scotia_shim = find_scotia_shim_binary()?;
-            let aliases = detect_aliases(DEFAULT_AGENT_NAMES);
-            if !aliases.is_empty() {
-                eprintln!("Detected shell aliases that may shadow shims:");
-                for a in &aliases {
-                    eprintln!("  - {}", a);
-                }
-                eprintln!("Consider removing them or re-sourcing your shell config.");
-            }
-            let result = install_shims(&shim_dir, &scotia_shim, DEFAULT_AGENT_NAMES)?;
-            update_shell_path(&shim_dir)?;
-            println!(
-                "Installed {} shims to {}",
-                result.created.len(),
-                shim_dir.display()
-            );
-            if !result.collisions.is_empty() {
-                eprintln!("Warning: existing binaries earlier in PATH:");
-                for c in &result.collisions {
-                    eprintln!("  - {}", c);
-                }
-            }
-            notifier.notify(crate::notify::shims_installed(result.created.len()))?;
+            shims::install(shim_dir, &notifier)?;
         }
         Some(Commands::UninstallShims { shim_dir }) => {
-            let shim_dir = shim_dir.unwrap_or_else(default_shim_dir);
-            let removed = uninstall_shims(&shim_dir, DEFAULT_AGENT_NAMES)?;
-            remove_shell_path(&shim_dir)?;
-            println!(
-                "Removed {} shims from {}",
-                removed.len(),
-                shim_dir.display()
-            );
-            notifier.notify(crate::notify::shims_uninstalled())?;
+            shims::uninstall(shim_dir, &notifier)?;
         }
         Some(Commands::Notify { command }) => match command {
             None | Some(NotifyCommands::Test) => {
