@@ -228,3 +228,36 @@ fn escape_dot(s: &str) -> String {
         .replace('"', "\\\"")
         .replace('\n', " ")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn unescaped_quotes(s: &str) -> usize {
+        let b = s.as_bytes();
+        let mut n = 0;
+        for i in 0..b.len() {
+            if b[i] == b'"' && (i == 0 || b[i - 1] != b'\\') {
+                n += 1;
+            }
+        }
+        n
+    }
+
+    // A crafted Graphviz label must not break out of its quoted attribute:
+    // embedded quotes are escaped and newlines are flattened, so a malicious
+    // `target`/`tool` string cannot inject extra DOT attributes.
+    #[test]
+    fn escape_dot_neutralises_label_injection() {
+        assert_eq!(escape_dot(r#"a"[label=x]"#), r#"a\"[label=x]"#);
+
+        let out = escape_dot("a\"b\nc");
+        assert_eq!(out, r#"a\"b c"#);
+        assert!(!out.contains('\n'), "newlines must be flattened");
+        assert_eq!(
+            unescaped_quotes(&out),
+            0,
+            "every quote must be escaped so the DOT string cannot be terminated early"
+        );
+    }
+}

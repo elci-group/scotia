@@ -1,4 +1,5 @@
 mod daemon;
+mod doctor;
 mod run;
 
 use crate::algebra::{diff_runs, regression_suite, render_regression_suite, validate};
@@ -128,6 +129,9 @@ enum Commands {
         #[command(subcommand)]
         command: DaemonCommands,
     },
+
+    /// Diagnose the Scotia installation, runtime layout, shims, and daemon.
+    Doctor,
 
     /// Apply an installation (used by GUI installers).
     Installer {
@@ -366,6 +370,9 @@ pub async fn main() -> Result<()> {
         },
         Some(Commands::Daemon { command }) => {
             daemon::handle_daemon_command(command).await?;
+        }
+        Some(Commands::Doctor) => {
+            doctor::run_doctor().await?;
         }
     }
 

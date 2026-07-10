@@ -83,7 +83,7 @@ fn install_systemd() -> Result<ServiceResult> {
     let dest = user_dir.join("scotiad.service");
 
     let service_text = fs::read_to_string(&source)?;
-    let expanded = expand_service_template(&service_text);
+    let expanded = expand_service_template(&service_text)?;
     fs::write(&dest, expanded)?;
 
     let mut output = String::new();
@@ -144,7 +144,7 @@ fn install_launchd() -> Result<ServiceResult> {
     let dest = agents_dir.join("com.scotia.scotiad.plist");
 
     let plist_text = fs::read_to_string(&source)?;
-    let expanded = expand_service_template(&plist_text);
+    let expanded = expand_service_template(&plist_text)?;
     fs::write(&dest, expanded)?;
 
     let output = run_cmd("launchctl", &["load", dest.to_string_lossy().as_ref()])?;
@@ -197,17 +197,27 @@ fn bundled_service_file(name: &str) -> Result<PathBuf> {
     anyhow::bail!("could not find bundled service file {}", name)
 }
 
-fn expand_service_template(text: &str) -> String {
+fn expand_service_template(text: &str) -> Result<String> {
     let home = dirs::home_dir()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| std::env::temp_dir().to_string_lossy().to_string());
     let exe = std::env::current_exe()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| "scotiad".to_string());
+    expand_service_template_with(text, &home, &exe)
+}
 
-    text.replace("%h", &home)
-        .replace("/usr/local/bin/scotiad", &exe)
-        .replace("/Users/%u", &home)
+fn expand_service_template_with(text: &str, home: &str, exe: &str) -> Result<String> {
+    // Parity with installer::systemd_escape_exec: a newline in a substituted
+    // path would let a crafted path inject additional unit-file directives.
+    if exe.contains('\n') || exe.contains('\r') || home.contains('\n') || home.contains('\r') {
+        anyhow::bail!("refusing to expand service template: path contains a newline");
+    }
+
+    Ok(text
+        .replace("%h", home)
+        .replace("/usr/local/bin/scotiad", exe)
+        .replace("/Users/%u", home))
 }
 
 fn run_cmd(program: &str, args: &[&str]) -> Result<String> {
@@ -239,8 +249,38 @@ mod tests {
 
     #[test]
     fn expand_replaces_home_placeholder() {
-        let expanded = expand_service_template("ExecStart=%h/.local/bin/scotiad");
+        let expanded = expand_service_template("ExecStart=%h/.local/bin/scotiad").unwrap();
         assert!(!expanded.contains('%'));
+    }
+
+    #[test]
+    fn expand_inner_replaces_all_placeholders() {
+        let out = expand_service_template_with(
+            "ExecStart=/usr/local/bin/scotiad\nWorkingDirectory=%h\nUser=/Users/%u",
+            "/home/alice",
+            "/home/alice/.local/bin/scotiad",
+        )
+        .unwrap();
+        assert!(out.contains("/home/alice/.local/bin/scotiad"));
+        assert!(out.contains("WorkingDirectory=/home/alice\n"));
+        assert!(out.contains("/home/alice\n"));
+        assert!(!out.contains("%h"));
+        assert!(!out.contains("/Users/%u"));
+        assert!(!out.contains("/usr/local/bin/scotiad"));
+    }
+
+    #[test]
+    fn expand_inner_rejects_newline_in_home() {
+        let err =
+            expand_service_template_with("x", "/home/ali\nce", "/usr/bin/scotiad").unwrap_err();
+        assert!(err.to_string().contains("newline"));
+    }
+
+    #[test]
+    fn expand_inner_rejects_newline_in_exe() {
+        let err =
+            expand_service_template_with("x", "/home/alice", "/usr/bin/sco\ntiad").unwrap_err();
+        assert!(err.to_string().contains("newline"));
     }
 
     #[test]

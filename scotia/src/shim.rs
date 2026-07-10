@@ -171,13 +171,13 @@ fn shell_rc_files() -> Vec<PathBuf> {
     .collect()
 }
 
-fn path_entries() -> Vec<PathBuf> {
+pub(crate) fn path_entries() -> Vec<PathBuf> {
     std::env::var_os("PATH")
         .map(|v| std::env::split_paths(&v).collect())
         .unwrap_or_default()
 }
 
-fn find_in_path(name: &str, entries: &[PathBuf]) -> Option<PathBuf> {
+pub(crate) fn find_in_path(name: &str, entries: &[PathBuf]) -> Option<PathBuf> {
     for dir in entries {
         let candidate = dir.join(name);
         if candidate.exists() {
@@ -256,6 +256,26 @@ mod tests {
         let block = path_block(Path::new("/home/sal/.local/share/scotia/shims"));
         assert!(block.contains("/home/sal/.local/share/scotia/shims"));
         assert!(block.contains("Scotia shims"));
+    }
+
+    // A world-writable binary earlier in PATH must never be executed; only an
+    // executable that is not group/other-writable is considered safe.
+    #[cfg(unix)]
+    #[test]
+    fn is_safe_executable_rejects_world_writable() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = TempDir::new().unwrap();
+        let p = tmp.path().join("agent");
+        fs::write(&p, b"#!/bin/sh\n").unwrap();
+
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(!is_safe_executable(&p), "world-writable must be rejected");
+
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(is_safe_executable(&p), "owner-only executable accepted");
+
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(!is_safe_executable(&p), "non-executable must be rejected");
     }
 }
 

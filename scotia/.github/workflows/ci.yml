@@ -36,8 +36,21 @@ jobs:
       - name: Audit dependencies for known vulnerabilities
         run: cargo audit
 
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Deny policy check (advisories, sources)
+        run: cargo deny check advisories sources
+
       - name: Build
         run: cargo build --release
 
       - name: Run tests
         run: cargo test --lib
+
+      # Regression guard: ensure the criterion benches still compile on every PR
+      # so they cannot silently bitrot against API drift. Full benchmark runs with
+      # baseline comparison are intentionally out of the PR gate (like fuzz-smoke)
+      # and belong to a scheduled workflow; this keeps CI fast and deterministic.
+      - name: Compile benchmarks (regression guard)
+        run: cargo bench --no-run

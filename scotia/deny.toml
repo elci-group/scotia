@@ -7,11 +7,9 @@
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "deny"
-unmaintained = "warn"
-unsound = "warn"
-yanked = "deny"
-notice = "warn"
+# cargo-deny 0.19+ defaults implement the policy above (vulnerability/yanked
+# are errors; unmaintained/unsound/notice are warnings). The per-lint level
+# keys were removed upstream (cargo-deny#611), so this config uses defaults.
 # Known low-severity transitive warnings, all TUI-only via `ratatui` and not
 # reachable with attacker-controlled input. Tracked here rather than hidden:
 #   - RUSTSEC-2024-0436  paste  (unmaintained)

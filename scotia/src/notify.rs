@@ -320,4 +320,29 @@ mod tests {
         assert!(matches!(n.level, NotificationLevel::NoreasterWarning));
         assert!(n.body.contains("Cape Breton"));
     }
+
+    // ANSI/terminal control characters in a `task`/`cwd` must not reach the
+    // terminal, but newlines and tabs (legitimate formatting) are preserved.
+    #[test]
+    fn strip_control_chars_removes_ansi_but_keeps_whitespace() {
+        let input = "a\x1b[31mred\x1b[0m\n\tz";
+        let out = strip_control_chars(input);
+        assert_eq!(out, "a[31mred[0m\n\tz");
+        assert!(
+            !out.chars()
+                .any(|c| c.is_control() && c != '\n' && c != '\t'),
+            "only newline/tab control chars may survive"
+        );
+    }
+
+    // Desktop notifications permit a small HTML subset; markup-significant
+    // characters must be escaped so a crafted string cannot render as a link.
+    #[cfg(feature = "notify")]
+    #[test]
+    fn escape_desktop_markup_neutralises_html() {
+        assert_eq!(
+            escape_desktop_markup(r#"<a href="x">&'"#),
+            "&lt;a href=&quot;x&quot;&gt;&amp;'"
+        );
+    }
 }

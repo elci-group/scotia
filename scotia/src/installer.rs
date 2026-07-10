@@ -391,4 +391,33 @@ mod tests {
         install_shims(&shim_dir, &bin_dir).unwrap();
         assert!(shim_dir.join("kimi").exists() || shim_dir.join("kimi.cmd").exists());
     }
+
+    // A newline in a path would let an attacker append `[Service]` directives
+    // to the generated unit; it must be rejected outright.
+    #[test]
+    fn systemd_escape_exec_rejects_newlines() {
+        assert!(systemd_escape_exec("/bin/evil\n[Service]").is_err());
+        assert!(systemd_escape_exec("/bin/evil\r\n[Service]").is_err());
+    }
+
+    // Ordinary paths are wrapped in double quotes; embedded quotes/backslashes
+    // are escaped so systemd tokenises the path as a single argument.
+    #[test]
+    fn systemd_escape_exec_quotes_and_escapes_path() {
+        let out = systemd_escape_exec("/usr/local/bin/scotiad").unwrap();
+        assert!(out.starts_with('"') && out.ends_with('"'));
+        assert_eq!(out.len(), "/usr/local/bin/scotiad".len() + 2);
+
+        let escaped = systemd_escape_exec(r#"/opt/a"b\c"#).unwrap();
+        assert!(escaped.contains(r#"\""#), "embedded quote must be escaped");
+        assert!(
+            escaped.contains(r"\\"),
+            "embedded backslash must be escaped"
+        );
+    }
+
+    #[test]
+    fn xml_escape_escapes_all_significant_chars() {
+        assert_eq!(xml_escape(r#"<a>&"'"#), "&lt;a&gt;&amp;&quot;&apos;");
+    }
 }
