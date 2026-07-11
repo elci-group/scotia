@@ -1,17 +1,25 @@
 name: Release signing
 
-# Builds the published Linux x86_64 asset, produces SHA256SUMS, and signs the
-# manifest with minisign. The minisign PUBLIC key paired with MINISIGN_SECRET_KEY
-# must be the value pinned as MINISIGN_PUBKEY in
-# scotia/scotia.tech/downloads/install-scotia.sh — otherwise installer verification
-# will (correctly) reject the manifest.
+# Builds the Linux x86_64 asset, produces SHA256SUMS, uploads them to the
+# release, and — when the MINISIGN_SECRET_KEY repository secret is present —
+# signs the manifest with minisign and uploads SHA256SUMS.minisig alongside.
 #
-# Required repository secret:
+# Assets are uploaded BEFORE signing so a missing signing key can never block a
+# release: without the secret the run emits a warning and ships an unsigned but
+# complete release. If the secret IS present and minisign itself fails, the run
+# fails loud. The minisign PUBLIC key paired with MINISIGN_SECRET_KEY must be
+# the value pinned as MINISIGN_PUBKEY in
+# scotia/scotia.tech/downloads/install-scotia.sh — otherwise installer
+# verification will (correctly) reject the manifest.
+#
+# Optional repository secret:
 #   MINISIGN_SECRET_KEY  contents of the minisign secret key file
 #                        (generate with: minisign -G -p minisign.pub -s minisign.key)
 #
-# Triggers are repo-global (a published release, or a pushed v* tag); the build
-# itself runs inside the scotia/ subdirectory via the working-directory default.
+# Triggers are repo-global (a published release, a pushed v* tag, or a manual
+# dispatch); the build itself runs inside the scotia/ subdirectory via the
+# working-directory default. On a tag push with no release yet, the upload steps
+# warn and skip — publishing the release re-triggers the workflow.
 
 on:
   release:
@@ -19,11 +27,17 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to (re)build and upload assets for'
+        required: true
 
 env:
   CARGO_TERM_COLOR: always
   ASSET: scotia-linux-x64
   CHECKSUM_FILE: SHA256SUMS
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 defaults:
   run:
@@ -38,6 +52,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -57,6 +73,20 @@ jobs:
           cp target/release/scotia "dist/$ASSET"
           (cd dist && sha256sum "$ASSET" > "$CHECKSUM_FILE")
 
+      - name: Upload release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "::warning::No release exists for ${RELEASE_TAG} yet; skipping asset upload (the release:published trigger will re-run this workflow)."
+            exit 0
+          fi
+          gh release upload "${RELEASE_TAG}" \
+            "dist/$ASSET" \
+            "dist/$CHECKSUM_FILE" \
+            --clobber
+
       - name: Install minisign
         run: |
           set -euo pipefail
@@ -69,8 +99,8 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${MINISIGN_SECRET_KEY:-}" ]]; then
-            echo "MINISIGN_SECRET_KEY is not set; cannot sign release." >&2
-            exit 1
+            echo "::warning::MINISIGN_SECRET_KEY is not set; release ships UNSIGNED. Add the repository secret to enable minisign signatures."
+            exit 0
           fi
           keyfile="$(mktemp)"
           chmod 600 "$keyfile"
@@ -80,13 +110,19 @@ jobs:
           echo "Signed manifest:"
           cat "dist/${CHECKSUM_FILE}.minisig"
 
-      - name: Upload release assets
+      - name: Upload signature
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh release upload "${GITHUB_REF_NAME}" \
-            "dist/$ASSET" \
-            "dist/$CHECKSUM_FILE" \
+          if [[ ! -f "dist/${CHECKSUM_FILE}.minisig" ]]; then
+            echo "No signature produced; nothing to upload."
+            exit 0
+          fi
+          if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "::warning::No release exists for ${RELEASE_TAG} yet; skipping signature upload."
+            exit 0
+          fi
+          gh release upload "${RELEASE_TAG}" \
             "dist/${CHECKSUM_FILE}.minisig" \
             --clobber
