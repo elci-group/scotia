@@ -20,6 +20,13 @@ r = 0.15
 enabled = false
 branch = "main"
 
+[angler.git_hooks]
+# Disabled: kaptaind derives the hooks dir as repo_path/.git/hooks, but the git
+# root here is the /home/sal monorepo — so hooks landed in a fake scotia/.git/
+# and never fired. Pointing them at the real monorepo hooks dir would run
+# scotia's hooks on every commit in every project, which is worse.
+enabled = false
+
 [ratelimit]
 # 30s floor between auto-commits: slows any future self-trigger pathology to a
 # walk while the ignore rules (see .kaptainignore) address the root cause.
