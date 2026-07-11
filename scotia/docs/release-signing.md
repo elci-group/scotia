@@ -7,8 +7,13 @@ unauthenticated binary by default.
 ## Chain of trust
 
 1. The release workflow (`.github/workflows/release-sign.yml`) builds the asset,
-   writes `SHA256SUMS`, and signs the manifest with minisign:
-   `SHA256SUMS.minisig`.
+   writes `SHA256SUMS`, and uploads both to the release. When the
+   `MINISIGN_SECRET_KEY` repository secret is present it then signs the manifest
+   with minisign (`SHA256SUMS.minisig`) and uploads the signature; when the
+   secret is absent the run warns and ships the release unsigned — a missing key
+   never blocks a release. An existing release can be (re)signed without a new
+   tag via the workflow's manual dispatch (Actions → Release signing → Run
+   workflow, passing the tag).
 2. The installer downloads the asset, `SHA256SUMS`, and `SHA256SUMS.minisig`.
 3. It verifies the SHA-256 of the asset against the manifest (integrity), then
    verifies the minisign signature over the manifest against a **pinned public
@@ -18,6 +23,19 @@ The checksum proves the bytes were not corrupted; the signature over the
 checksum file proves the manifest itself was produced by the release key. A
 network attacker who swaps the asset but cannot produce a valid minisign
 signature over the new checksum is rejected.
+
+## Current status: unsigned until armed
+
+Signing is **not yet armed**: `MINISIGN_SECRET_KEY` is not provisioned and the
+installer still ships the placeholder `MINISIGN_PUBKEY`, so releases (including
+v0.1.6) are published unsigned. The installer therefore aborts with "Refusing
+to install an unauthenticated binary" on every release by default — that is the
+fail-closed design working as intended, not a bug. For evaluation installs,
+pass `--insecure-allow-unsigned` (checksum verification still runs).
+
+To arm signing, follow "Key management" below; the next published release then
+ships signed, and already-published releases can be re-signed in place via the
+manual workflow dispatch described above.
 
 ## Key management
 
