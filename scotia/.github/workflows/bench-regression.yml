@@ -1,0 +1,71 @@
+# Bench regression workflow.
+#
+# - Pushes to `master` run the criterion benches and persist the `master`
+#   baseline into the GitHub Actions cache (key: bench-baseline-master,
+#   path: target/criterion) on every run via actions/cache/save.
+# - Pull requests RESTORE that cached `master` baseline (restore-only, never
+#   save), run the benches under a fresh `pr` baseline, and print a
+#   `critcmp master pr` comparison for human review.
+# - The comparison is intentionally ADVISORY: GitHub-hosted runner variance makes
+#   a hard % threshold flaky, so this job never fails on performance deltas.
+#   Review the critcmp output manually. The job still fails if the benches
+#   themselves error or panic.
+#
+# Cache design notes (avoid two known foot-guns):
+# * PRs use actions/cache/restore (read-only). A plain actions/cache in a PR
+#   would, on a cold cache, SAVE the PR's `pr` baseline under the master key and
+#   poison the baseline for everyone.
+# * master uses actions/cache/save (not actions/cache), so the baseline refreshes
+#   on every master push instead of only on cache eviction.
+name: Bench regression
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Restore master criterion baseline (PR only)
+        if: github.event_name == 'pull_request'
+        id: baseline
+        uses: actions/cache/restore@v4
+        with:
+          path: target/criterion
+          key: bench-baseline-master
+
+      - name: Run benches (PR baseline)
+        if: github.event_name == 'pull_request'
+        run: cargo bench -- --save-baseline pr
+
+      - name: Run benches (master baseline)
+        if: github.event_name == 'push'
+        run: cargo bench -- --save-baseline master
+
+      - name: Save master criterion baseline
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: target/criterion
+          key: bench-baseline-master
+
+      - name: Compare PR against master baseline (advisory)
+        if: github.event_name == 'pull_request' && steps.baseline.outputs.cache-hit == 'true'
+        run: |
+          cargo install critcmp --locked
+          # advisory: runner variance makes a hard % threshold flaky; review critcmp output manually
+          critcmp master pr
+
+      - name: Note missing master baseline
+        if: github.event_name == 'pull_request' && steps.baseline.outputs.cache-hit != 'true'
+        run: echo "No cached master baseline yet; merge to master to record one, then PRs will compare."

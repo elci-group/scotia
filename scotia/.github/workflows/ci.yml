@@ -54,3 +54,24 @@ jobs:
       # and belong to a scheduled workflow; this keeps CI fast and deterministic.
       - name: Compile benchmarks (regression guard)
         run: cargo bench --no-run
+
+  check-macos:
+    name: Unix permission model (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build
+
+      # The 0700/0600 socket-dir and token model is shared via src/runtime.rs and
+      # relies on unix permission bits + unix sockets. Run its tests on macOS so
+      # the guarantees are not asserted on Linux alone.
+      - name: Verify runtime permission model
+        run: cargo test --lib runtime

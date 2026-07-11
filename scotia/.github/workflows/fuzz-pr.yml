@@ -1,0 +1,34 @@
+name: Fuzz PR smoke
+
+# Fast PR gate scoped to the IPC transport and interceptor code paths. This is
+# NOT the full weekly fuzz campaign: it runs a short libFuzzer smoke only when a
+# pull request touches those paths (or on manual dispatch), to catch regressions
+# cheaply. For the broader coverage run see fuzz-smoke.yml.
+
+on:
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'src/ipc_transport.rs'
+      - 'src/interceptors/**'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [fuzz_daemon_request, fuzz_interceptors]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Run ${{ matrix.target }}
+        run: cargo fuzz run ${{ matrix.target }} -- -runs=2000 -max_total_time=30
