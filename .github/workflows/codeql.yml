@@ -44,13 +44,10 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          build-mode: manual
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build (manual, in scotia/)
-        run: cargo build --bins
+          # Rust only supports buildless (standalone) extraction in this CodeQL
+          # release — autobuild and manual are rejected. The extractor scans the
+          # scotia/ Rust sources directly from the source root.
+          build-mode: none
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3

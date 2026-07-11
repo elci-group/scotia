@@ -58,11 +58,14 @@ jobs:
 
       - name: Run benches (PR baseline)
         if: github.event_name == 'pull_request'
-        run: cargo bench -- --save-baseline pr
+        # Scope to the single criterion bench target: a bare `cargo bench --`
+        # would also build the lib/bin targets with the default libtest harness,
+        # which rejects criterion's --save-baseline flag.
+        run: cargo bench --bench scotia_bench -- --save-baseline pr
 
       - name: Run benches (master baseline)
         if: github.event_name == 'push'
-        run: cargo bench -- --save-baseline master
+        run: cargo bench --bench scotia_bench -- --save-baseline master
 
       - name: Save master criterion baseline
         if: github.event_name == 'push'

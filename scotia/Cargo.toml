@@ -1,6 +1,6 @@
 [package]
 name = "scotia"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 description = "Semantic Decision Ledger for agentic systems"
 authors = ["Scotia Contributors"]

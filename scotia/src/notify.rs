@@ -179,22 +179,27 @@ impl Notifier for DesktopNotifier {
             ))
             .body(&escape_desktop_markup(&n.body));
 
-        match n.level {
-            NotificationLevel::Mayday => {
-                builder.urgency(notify_rust::Urgency::Critical);
-            }
-            NotificationLevel::NoreasterWarning => {
-                builder.urgency(notify_rust::Urgency::Normal);
-            }
-            _ => {
-                builder.urgency(notify_rust::Urgency::Low);
-            }
-        }
+        apply_urgency(&mut builder, n.level);
 
         builder.show()?;
         Ok(())
     }
 }
+
+/// Apply a notification urgency where the backend supports it. notify-rust only
+/// implements `urgency` on D-Bus (Linux/BSD) and Windows; the macOS backend has
+/// no such API, so severity there rides on the summary icon.
+#[cfg(all(feature = "notify", not(target_os = "macos")))]
+fn apply_urgency(builder: &mut notify_rust::Notification, level: NotificationLevel) {
+    builder.urgency(match level {
+        NotificationLevel::Mayday => notify_rust::Urgency::Critical,
+        NotificationLevel::NoreasterWarning => notify_rust::Urgency::Normal,
+        _ => notify_rust::Urgency::Low,
+    });
+}
+
+#[cfg(all(feature = "notify", target_os = "macos"))]
+fn apply_urgency(_builder: &mut notify_rust::Notification, _level: NotificationLevel) {}
 
 /// Pick the best notifier available on this build.
 pub fn default_notifier() -> Arc<dyn Notifier> {
