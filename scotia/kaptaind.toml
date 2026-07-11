@@ -21,13 +21,18 @@ enabled = false
 branch = "main"
 
 [ratelimit]
-min_commit_interval = 10
+# 30s floor between auto-commits: slows any future self-trigger pathology to a
+# walk while the ignore rules (see .kaptainignore) address the root cause.
+min_commit_interval = 30
 
 [test]
 command = "cargo test"
 required = true
 
-# [staging]
-# mode = "all"        # "all" (default), "cluster" (only changed files), or "pattern"
-# include = ["src/**"] # only used in "pattern" mode
-# exclude = ["*.log", ".env*"]
+[staging]
+# Cluster mode is mandatory here: the git root is the /home/sal monorepo, so
+# "all" would run `git add -A` across the whole home directory and sweep in
+# untracked, secret-adjacent files. Cluster mode stages only the changed
+# cluster paths plus Cargo.toml/VERSION, and fails closed if a path is gone.
+mode = "cluster"
+exclude = ["*.log", ".env*"]

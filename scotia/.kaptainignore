@@ -7,3 +7,15 @@
 
 # Rust
 target
+
+# Version metadata — kaptaind's own save_version rewrites VERSION + Cargo.toml
+# on every auto-commit (and the test build then touches Cargo.lock). If the
+# watcher sees those writes, each commit re-triggers the next cluster and the
+# daemon cascades (observed: v0.1.6 -> v0.1.9 in three self-commits). These
+# files are still staged in every commit via cluster meta-staging, so version
+# bumps land in history; they just can no longer START a cluster. Consequence:
+# a lone dependency edit to Cargo.toml/Cargo.lock will not auto-commit on its
+# own — it rides along with the next source change, or commit it manually.
+VERSION
+Cargo.toml
+Cargo.lock
