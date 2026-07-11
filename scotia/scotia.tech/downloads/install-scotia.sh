@@ -18,7 +18,7 @@ BINARY_NAME="scotia"
 ASSET="scotia-linux-x64"
 CHECKSUM_FILE="SHA256SUMS"
 
-REPO_URL="https://github.com/scotia/scotia"
+REPO_URL="https://github.com/elci-group/scotia"
 
 # Pinned minisign public key used to authenticate SHA256SUMS. Release builds
 # MUST replace this placeholder with the real release signing public key (the

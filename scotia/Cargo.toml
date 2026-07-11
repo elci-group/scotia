@@ -1,11 +1,11 @@
 [package]
 name = "scotia"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 description = "Semantic Decision Ledger for agentic systems"
 authors = ["Scotia Contributors"]
 license = "MIT"
-repository = "https://github.com/scotia/scotia"
+repository = "https://github.com/elci-group/scotia"
 
 [dependencies]
 anyhow = "1.0"
