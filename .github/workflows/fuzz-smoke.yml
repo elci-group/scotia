@@ -1,14 +1,18 @@
 name: Fuzz smoke
 
 # Short libFuzzer smoke run (NOT a 24h campaign): proves the fuzz targets in
-# fuzz/ still build under nightly and survive a small batch of inputs without
-# panicking. Runs weekly and on demand; does not gate PRs. The targets are
-# type-checked on stable by `cargo check --manifest-path fuzz/Cargo.toml`.
+# scotia/fuzz/ still build under nightly and survive a small batch of inputs
+# without panicking. Runs weekly and on demand; does not gate PRs. The targets
+# are type-checked on stable by `cargo check --manifest-path fuzz/Cargo.toml`.
 
 on:
   schedule:
     - cron: '23 4 * * 2'  # Tue 04:23, off the round-minute herd
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: scotia
 
 jobs:
   smoke:

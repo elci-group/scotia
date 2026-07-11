@@ -1,8 +1,8 @@
 # Bench regression workflow.
 #
-# - Pushes to `master` run the criterion benches and persist the `master`
-#   baseline into the GitHub Actions cache (key: bench-baseline-master,
-#   path: target/criterion) on every run via actions/cache/save.
+# - Pushes to `master` run the criterion benches (inside scotia/) and persist the
+#   `master` baseline into the GitHub Actions cache (key: bench-baseline-master,
+#   path: scotia/target/criterion) on every run via actions/cache/save.
 # - Pull requests RESTORE that cached `master` baseline (restore-only, never
 #   save), run the benches under a fresh `pr` baseline, and print a
 #   `critcmp master pr` comparison for human review.
@@ -22,9 +22,17 @@ name: Bench regression
 on:
   push:
     branches: [master]
+    paths:
+      - 'scotia/**'
   pull_request:
     branches: [master, main]
+    paths:
+      - 'scotia/**'
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: scotia
 
 jobs:
   bench:
@@ -35,13 +43,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: scotia
 
+      # `uses` steps ignore working-directory, so the cache path is
+      # repo-root-relative (scotia/target/criterion), not target/criterion.
       - name: Restore master criterion baseline (PR only)
         if: github.event_name == 'pull_request'
         id: baseline
         uses: actions/cache/restore@v4
         with:
-          path: target/criterion
+          path: scotia/target/criterion
           key: bench-baseline-master
 
       - name: Run benches (PR baseline)
@@ -56,7 +68,7 @@ jobs:
         if: github.event_name == 'push'
         uses: actions/cache/save@v4
         with:
-          path: target/criterion
+          path: scotia/target/criterion
           key: bench-baseline-master
 
       - name: Compare PR against master baseline (advisory)

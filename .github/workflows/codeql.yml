@@ -1,17 +1,27 @@
 name: CodeQL
 
 # Static analysis for the Rust codebase. CodeQL's Rust support builds the crate
-# and queries the resulting IR for injection, unsafe-usage, and logic bugs.
+# and queries the resulting IR for injection, unsafe-usage, and logic bugs. The
+# crate lives in scotia/, so we use a manual build (autobuild would look for
+# Cargo.toml at the repo root and miss it).
 
 on:
   push:
     branches: [master, main]
+    paths:
+      - 'scotia/**'
   pull_request:
     branches: [master, main]
+    paths:
+      - 'scotia/**'
   schedule:
     # Weekly, off the round-minute herd.
     - cron: '17 3 * * 1'
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: scotia
 
 permissions:
   actions: read
@@ -34,13 +44,13 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          build-mode: autobuild
+          build-mode: manual
 
-      # autobuild runs `cargo build`. If a future CodeQL release struggles with
-      # edition 2024, pin a toolchain and switch to a manual build:
-      #   - uses: dtolnay/rust-toolchain@stable
-      #   - run: cargo build --workspace --bins
-      # and set build-mode: manual above.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build (manual, in scotia/)
+        run: cargo build --bins
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3

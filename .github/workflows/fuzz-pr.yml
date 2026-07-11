@@ -4,14 +4,21 @@ name: Fuzz PR smoke
 # NOT the full weekly fuzz campaign: it runs a short libFuzzer smoke only when a
 # pull request touches those paths (or on manual dispatch), to catch regressions
 # cheaply. For the broader coverage run see fuzz-smoke.yml.
+#
+# Path filters are repo-root-relative (scotia/ is a subdirectory of this
+# monorepo); run steps execute inside scotia/ via the working-directory default.
 
 on:
   pull_request:
     branches: [master, main]
     paths:
-      - 'src/ipc_transport.rs'
-      - 'src/interceptors/**'
+      - 'scotia/src/ipc_transport.rs'
+      - 'scotia/src/interceptors/**'
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: scotia
 
 jobs:
   smoke:

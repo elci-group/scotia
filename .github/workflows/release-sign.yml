@@ -3,12 +3,15 @@ name: Release signing
 # Builds the published Linux x86_64 asset, produces SHA256SUMS, and signs the
 # manifest with minisign. The minisign PUBLIC key paired with MINISIGN_SECRET_KEY
 # must be the value pinned as MINISIGN_PUBKEY in
-# scotia.tech/downloads/install-scotia.sh — otherwise installer verification
+# scotia/scotia.tech/downloads/install-scotia.sh — otherwise installer verification
 # will (correctly) reject the manifest.
 #
 # Required repository secret:
 #   MINISIGN_SECRET_KEY  contents of the minisign secret key file
 #                        (generate with: minisign -G -p minisign.pub -s minisign.key)
+#
+# Triggers are repo-global (a published release, or a pushed v* tag); the build
+# itself runs inside the scotia/ subdirectory via the working-directory default.
 
 on:
   release:
@@ -21,6 +24,10 @@ env:
   CARGO_TERM_COLOR: always
   ASSET: scotia-linux-x64
   CHECKSUM_FILE: SHA256SUMS
+
+defaults:
+  run:
+    working-directory: scotia
 
 permissions:
   contents: write
@@ -37,6 +44,8 @@ jobs:
 
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: scotia
 
       - name: Build release binaries
         run: cargo build --release --bins

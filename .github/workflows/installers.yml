@@ -4,21 +4,30 @@ name: Installer verification
 # prove the installers parse, expose the expected safety controls, and fail
 # closed — they do not perform full end-to-end installs (that needs signing
 # keys, Apple tooling, and a Windows NSIS toolchain). See
-# docs/installer-verification.md for the manual runbook that covers the rest.
+# scotia/docs/installer-verification.md for the manual runbook that covers the
+# rest.
+#
+# Path filters are repo-root-relative (scotia/ is a monorepo subdirectory); the
+# run steps execute inside scotia/ so project-relative paths like
+# scotia.tech/... and installer/... resolve correctly.
 
 on:
   push:
     branches: [master, main]
     paths:
-      - 'scotia.tech/downloads/install-scotia.sh'
-      - 'installer/**'
+      - 'scotia/scotia.tech/downloads/install-scotia.sh'
+      - 'scotia/installer/**'
       - '.github/workflows/installers.yml'
   pull_request:
     branches: [master, main]
     paths:
-      - 'scotia.tech/downloads/install-scotia.sh'
-      - 'installer/**'
+      - 'scotia/scotia.tech/downloads/install-scotia.sh'
+      - 'scotia/installer/**'
       - '.github/workflows/installers.yml'
+
+defaults:
+  run:
+    working-directory: scotia
 
 jobs:
   linux:

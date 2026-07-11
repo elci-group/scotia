@@ -3,11 +3,22 @@ name: CI
 on:
   push:
     branches: [master, main]
+    paths:
+      - 'scotia/**'
   pull_request:
     branches: [master, main]
+    paths:
+      - 'scotia/**'
 
 env:
   CARGO_TERM_COLOR: always
+
+# The scotia Cargo project lives in the scotia/ subdirectory of this monorepo
+# (sibling to nina/). Run all cargo commands there; `uses` steps (checkout,
+# cache) ignore this and operate at the repo root.
+defaults:
+  run:
+    working-directory: scotia
 
 jobs:
   check:
@@ -23,6 +34,8 @@ jobs:
 
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: scotia
 
       - name: Check formatting
         run: cargo fmt --check
@@ -50,8 +63,8 @@ jobs:
 
       # Regression guard: ensure the criterion benches still compile on every PR
       # so they cannot silently bitrot against API drift. Full benchmark runs with
-      # baseline comparison are intentionally out of the PR gate (like fuzz-smoke)
-      # and belong to a scheduled workflow; this keeps CI fast and deterministic.
+      # baseline comparison live in bench-regression.yml; this keeps CI fast and
+      # deterministic.
       - name: Compile benchmarks (regression guard)
         run: cargo bench --no-run
 
@@ -66,6 +79,8 @@ jobs:
 
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: scotia
 
       - name: Build
         run: cargo build
